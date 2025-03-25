@@ -44,7 +44,7 @@ services:
     ports:
       - "3306:3306"
     environment:
-      MYSQL_DATABASE: laravel
+      MYSQL_DATABASE: hostel
       MYSQL_ROOT_PASSWORD: root
       SERVICE_TAGS: dev
       SERVICE_NAME: mysql
