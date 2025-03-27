@@ -27,7 +27,7 @@ return new class extends Migration {
                 $table->string('status', 10)->default('active')->after('vehicle_plate');
             }
             if (!Schema::hasColumn('users', 'role_id')) {
-                $table->foreignId('role_id')->after('status')->constrained('roles');
+                $table->foreignId('role_id')->nullable()->after('status')->constrained('roles')->onDelete('set null');
             }
             if (!Schema::hasColumn('users', 'avatar_url')) {
                 $table->string('avatar_url', 255)->nullable()->after('role_id');
