@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -11,6 +12,7 @@ class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable;
+    use SoftDeletes;
 
     /**
      * The attributes that are mass assignable.
@@ -18,9 +20,17 @@ class User extends Authenticatable
      * @var list<string>
      */
     protected $fillable = [
+        'username',
         'name',
         'email',
-        'password',
+        'phone_number',
+        'hometown',
+        'identity_card',
+        'vehicle_plate',
+        'status',
+        'role_id',
+        'avatar_url',
+        'notification_preferences'
     ];
 
     /**
@@ -44,5 +54,51 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function role()
+    {
+        return $this->belongsTo(Role::class);
+    }
+
+    public function housesCreated()
+    {
+        return $this->hasMany(House::class, 'created_by');
+    }
+
+    public function housesManaged()
+    {
+        return $this->hasMany(House::class, 'manager_id');
+    }
+
+    public function maintenanceRequests()
+    {
+        return $this->hasMany(MaintenanceRequest::class, 'user_id');
+    }
+
+    public function notifications()
+    {
+        return $this->hasMany(Notification::class, 'user_id');
+    }
+
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::deleting(function ($user) {
+            if (!$user->isForceDeleting()) {
+                $admin = User::where('role_id', function ($query) {
+                    $query->select('id')->from('roles')->where('code', 'admin');
+                })->first();
+
+                if ($admin) {
+                    $user->housesCreated()->update(['created_by' => $admin->id]);
+                    $user->housesManaged()->update(['managed_by' => $admin->id]);
+                    $user->maintenanceRequests()->where('status', 'pending')->update(['user_id' => $admin->id]);
+                }
+
+                $user->notifications()->delete();
+            }
+        });
     }
 }
