@@ -12,7 +12,6 @@ class ServicePriceHistoryResource extends JsonResource
     {
         return [
             'id'              => $this->id,
-            'room_service_id' => $this->room_service_id,
             'price'           => $this->price,
             'effective_from'  => $this->effective_from,
             'effective_to'    => $this->effective_to,

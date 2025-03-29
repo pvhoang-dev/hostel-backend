@@ -13,12 +13,10 @@ class EquipmentStorageResource extends JsonResource
     {
         return [
             'id'           => $this->id,
-            'house_id'     => $this->house_id,
-            'equipment_id' => $this->equipment_id,
             'quantity'     => $this->quantity,
             'price'        => $this->price,
             'description'  => $this->description,
-            'house'        => new HouseResource($this->whenLoaded('house')),
+            // 'house'        => new HouseResource($this->whenLoaded('house')),
             'equipment'    => new EquipmentResource($this->whenLoaded('equipment')),
             'created_at'   => $this->created_at,
             'updated_at'   => $this->updated_at,

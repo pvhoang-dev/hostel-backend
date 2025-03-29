@@ -18,7 +18,6 @@ class ContractResource extends JsonResource
             'end_date'         => $this->end_date,
             'monthly_price'    => $this->monthly_price,
             'deposit_amount'   => $this->deposit_amount,
-            'payment_terms'    => $this->payment_terms,
             'notice_period'    => $this->notice_period,
             'deposit_status'   => $this->deposit_status,
             'termination_reason' => $this->termination_reason,

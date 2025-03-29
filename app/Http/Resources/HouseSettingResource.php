@@ -12,7 +12,7 @@ class HouseSettingResource extends JsonResource
     {
         return [
             'id'          => $this->id,
-            'house'       => new HouseResource($this->whenLoaded('house')),
+            // 'house'       => new HouseResource($this->whenLoaded('house')),
             'key'         => $this->key,
             'value'       => $this->value,
             'description' => $this->description,

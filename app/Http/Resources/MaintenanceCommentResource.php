@@ -13,7 +13,7 @@ class MaintenanceCommentResource extends JsonResource
     {
         return [
             'id'                     => $this->id,
-            'maintenance_request'    => new MaintenanceRequestResource($this->whenLoaded('maintenanceRequest')),
+            // 'maintenance_request'    => new MaintenanceRequestResource($this->whenLoaded('maintenanceRequest')),
             'user'                   => new UserResource($this->whenLoaded('user')),
             'content'                => $this->content,
             'created_at'             => $this->created_at,

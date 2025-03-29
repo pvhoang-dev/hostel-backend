@@ -12,14 +12,13 @@ class ServiceUsageResource extends JsonResource
     {
         return [
             'id'              => $this->id,
-            'room_service_id' => $this->room_service_id,
             'start_meter'     => $this->start_meter,
             'end_meter'       => $this->end_meter,
             'usage_value'     => $this->usage_value,
             'period'          => $this->period,
             'price_used'      => $this->price_used,
             'notes'           => $this->notes,
-            'room_service'    => new RoomServiceResource($this->whenLoaded('roomService')),
+            // 'room_service'    => new RoomServiceResource($this->whenLoaded('roomService')),
             'created_at'      => $this->created_at,
             'updated_at'      => $this->updated_at,
         ];

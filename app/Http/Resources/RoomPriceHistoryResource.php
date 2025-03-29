@@ -12,11 +12,10 @@ class RoomPriceHistoryResource extends JsonResource
     {
         return [
             'id'             => $this->id,
-            'room_id'        => $this->room_id,
             'price'          => $this->price,
             'effective_from' => $this->effective_from,
             'effective_to'   => $this->effective_to,
-            'room'           => new RoomResource($this->whenLoaded('room')),
+            // 'room'           => new RoomResource($this->whenLoaded('room')),
             'created_at'     => $this->created_at,
             'updated_at'     => $this->updated_at,
         ];

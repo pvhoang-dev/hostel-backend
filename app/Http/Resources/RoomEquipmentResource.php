@@ -13,14 +13,12 @@ class RoomEquipmentResource extends JsonResource
     {
         return [
             'id'           => $this->id,
-            'equipment_id' => $this->equipment_id,
-            'room_id'      => $this->room_id,
             'source'       => $this->source,
             'quantity'     => $this->quantity,
             'price'        => $this->price,
             'custom_name'  => $this->custom_name,
             'description'  => $this->description,
-            'room'         => new RoomResource($this->whenLoaded('room')),
+            // 'room'         => new RoomResource($this->whenLoaded('room')),
             'equipment'    => new EquipmentResource($this->whenLoaded('equipment')),
             'created_at'   => $this->created_at,
             'updated_at'   => $this->updated_at,

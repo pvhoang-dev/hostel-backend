@@ -15,7 +15,6 @@ class Contract extends Model
         'end_date',
         'monthly_price',
         'deposit_amount',
-        'payment_terms',
         'notice_period',
         'deposit_status',
         'termination_reason',
@@ -33,6 +32,11 @@ class Contract extends Model
     public function contractUsers()
     {
         return $this->hasMany(ContractUser::class);
+    }
+
+    public function users()
+    {
+        return $this->belongsToMany(User::class, 'contract_users', 'contract_id', 'user_id');
     }
 
     public function recurringInvoices()

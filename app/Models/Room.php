@@ -35,6 +35,11 @@ class Room extends Model
         return $this->hasMany(RoomEquipment::class);
     }
 
+    public function services()
+    {
+        return $this->hasMany(RoomService::class);
+    }
+
     protected static function boot()
     {
         parent::boot();
@@ -46,6 +51,9 @@ class Room extends Model
                 }
                 foreach ($room->equipments as $equipment) {
                     $equipment->delete();
+                }
+                foreach ($room->services as $service) {
+                    $service->delete();
                 }
             }
         });

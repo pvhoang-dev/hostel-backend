@@ -12,9 +12,9 @@ class MaintenanceRequestResource extends JsonResource
     {
         return [
             'id'           => $this->id,
-            'room_id'      => $this->room_id,
             'description'  => $this->description,
             'status'       => $this->status,
+            'room'        => new RoomResource($this->whenLoaded('room')),
             'user'         => new UserResource($this->whenLoaded('user')),
             'created_by'   => new UserResource($this->whenLoaded('creator')),
             'updated_by'   => new UserResource($this->whenLoaded('updater')),
