@@ -21,3 +21,10 @@ DB_PASSWORD=root
 docker compose down
 docker compose build --no-cache
 docker compose up -d
+
+
+su - root
+
+chown -R www:www /var/www
+chmod -R 775 /var/www/storage /var/www/bootstrap/cache
+exit
