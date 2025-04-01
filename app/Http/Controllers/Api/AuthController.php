@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use Illuminate\Http\Request;
-use App\Http\Controllers\Api\BaseController as BaseController;
-use App\Models\User;
-use Illuminate\Support\Facades\Auth;
-use Validator;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Auth;
 
+/**
+ * Class AuthController
+ *
+ * @package App\Http\Controllers\Api
+ */
 class AuthController extends BaseController
 {
     /**

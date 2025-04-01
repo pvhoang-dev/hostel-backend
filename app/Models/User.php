@@ -24,6 +24,7 @@ class User extends Authenticatable
         'username',
         'name',
         'email',
+        'password',
         'phone_number',
         'hometown',
         'identity_card',
@@ -94,7 +95,7 @@ class User extends Authenticatable
 
                 if ($admin) {
                     $user->housesCreated()->update(['created_by' => $admin->id]);
-                    $user->housesManaged()->update(['managed_by' => $admin->id]);
+                    $user->housesManaged()->update(['manager_id' => $admin->id]);
                     $user->maintenanceRequests()->where('status', 'pending')->update(['user_id' => $admin->id]);
                 }
 

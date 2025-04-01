@@ -1,14 +1,19 @@
 <?php
 
-namespace App\Http\Controllers\API;
+namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\BaseController as BaseController;
 use App\Http\Resources\RoleResource;
 use App\Models\Role;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Validator;
+use Illuminate\Support\Facades\Validator;
 
+/**
+ * Class RoleController
+ *
+ * @package App\Http\Controllers\Api
+ */
 class RoleController extends BaseController
 {
     /**
@@ -20,7 +25,10 @@ class RoleController extends BaseController
     {
         $roles = Role::all();
 
-        return $this->sendResponse(RoleResource::collection($roles), 'Roles retrieved successfully.');
+        return $this->sendResponse(
+            RoleResource::collection($roles),
+            'Roles retrieved successfully.'
+        );
     }
 
     /**
@@ -46,7 +54,10 @@ class RoleController extends BaseController
 
         $role = Role::create($input);
 
-        return $this->sendResponse(new RoleResource($role), 'Role created successfully.');
+        return $this->sendResponse(
+            new RoleResource($role),
+            'Role created successfully.'
+        );
     }
 
     /**
@@ -55,7 +66,7 @@ class RoleController extends BaseController
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function show($id): JsonResponse
+    public function show(int $id): JsonResponse
     {
         $role = Role::find($id);
 
@@ -63,14 +74,17 @@ class RoleController extends BaseController
             return $this->sendError('Role not found.');
         }
 
-        return $this->sendResponse(new RoleResource($role), 'Role retrieved successfully.');
+        return $this->sendResponse(
+            new RoleResource($role),
+            'Role retrieved successfully.'
+        );
     }
 
     /**
      * Update the specified resource in storage.
      *
      * @param  \Illuminate\Http\Request  $request
-     * @param  int  $id
+     * @param  \App\Models\Role  $role
      * @return \Illuminate\Http\Response
      */
     public function update(Request $request, Role $role): JsonResponse
@@ -97,14 +111,17 @@ class RoleController extends BaseController
 
         $role->save();
 
-        return $this->sendResponse(new RoleResource($role), 'Role updated successfully.');
+        return $this->sendResponse(
+            new RoleResource($role),
+            'Role updated successfully.'
+        );
     }
 
 
     /**
      * Remove the specified resource from storage.
      *
-     * @param  int  $id
+     * @param  \App\Models\Role  $role
      * @return \Illuminate\Http\Response
      */
     public function destroy(Role $role): JsonResponse
