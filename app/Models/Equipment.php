@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Equipment extends Model
 {
     use SoftDeletes;
+    protected $table = 'equipments';
     protected $fillable = ['name'];
 
     public function storages()

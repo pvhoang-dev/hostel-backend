@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\EquipmentController;
 use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\UserController;
@@ -22,4 +23,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Users
     Route::resource('users', UserController::class);
     Route::post('/users/change-password/{id}', [UserController::class, 'changePassword']);
+
+    // Equipments
+    Route::resource('equipments', EquipmentController::class);
 });
