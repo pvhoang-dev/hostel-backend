@@ -2,12 +2,12 @@
 
 namespace App\Http\Controllers\API;
 
-use Illuminate\Http\Request;
 use App\Http\Controllers\Api\BaseController as BaseController;
-use App\Models\Role;
-use Validator;
 use App\Http\Resources\RoleResource;
+use App\Models\Role;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Validator;
 
 class RoleController extends BaseController
 {
