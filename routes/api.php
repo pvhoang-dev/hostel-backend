@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\EquipmentController;
 use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\ServiceController;
+use App\Http\Controllers\Api\SystemSettingController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -30,4 +31,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Services
     Route::resource('services', ServiceController::class);
+
+    // System Settings
+    Route::resource('system-settings', SystemSettingController::class);
 });
