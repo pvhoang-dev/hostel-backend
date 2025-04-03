@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\EquipmentController;
+use App\Http\Controllers\Api\HouseController;
 use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\ServiceController;
@@ -34,4 +35,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // System Settings
     Route::resource('system-settings', SystemSettingController::class);
+
+    // Houses
+    Route::resource('houses', HouseController::class);
 });

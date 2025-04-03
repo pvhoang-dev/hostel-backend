@@ -39,6 +39,11 @@ class House extends Model
         return $this->hasMany(Room::class);
     }
 
+    public function storages()
+    {
+        return $this->hasMany(EquipmentStorage::class);
+    }
+
     public function settings()
     {
         return $this->hasMany(HouseSetting::class);
@@ -55,6 +60,9 @@ class House extends Model
                 }
                 foreach ($house->settings as $setting) {
                     $setting->delete();
+                }
+                foreach ($house->storages as $storage) {
+                    $storage->delete();
                 }
             }
         });
