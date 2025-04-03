@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\HouseSettingController;
 use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\ServiceController;
+use App\Http\Controllers\Api\StorageController;
 use App\Http\Controllers\Api\SystemSettingController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
@@ -40,4 +41,5 @@ Route::middleware('auth:sanctum')->group(function () {
     // Houses
     Route::resource('houses', HouseController::class);
     Route::resource('house-settings', HouseSettingController::class);
+    Route::resource('storages', StorageController::class);
 });
