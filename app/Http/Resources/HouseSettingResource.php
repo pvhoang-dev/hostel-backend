@@ -18,8 +18,9 @@ class HouseSettingResource extends JsonResource
             'description' => $this->description,
             'created_by'  => $this->created_by,
             'updated_by'  => $this->updated_by,
-            'created_at'  => $this->created_at,
-            'updated_at'  => $this->updated_at,
+            'created_at'  => $this->created_at->format('H:i:s d/m/Y'),
+            'updated_at'  => $this->updated_at->format('H:i:s d/m/Y'),
+            'deleted_at'  => $this->deleted_at ? $this->deleted_at->format('H:i:s d/m/Y') : null,
         ];
     }
 }
