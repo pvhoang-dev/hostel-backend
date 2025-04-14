@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class RoomEquipment extends Model
 {
     use SoftDeletes;
-    
+
     protected $table = 'room_equipments';
     protected $fillable = [
         'equipment_id',
@@ -16,7 +16,6 @@ class RoomEquipment extends Model
         'source',
         'quantity',
         'price',
-        'custom_name',
         'description'
     ];
 
