@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\EquipmentController;
 use App\Http\Controllers\Api\HouseController;
 use App\Http\Controllers\Api\HouseSettingController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\RoomController;
@@ -31,6 +32,10 @@ Route::middleware('auth:sanctum')->group(function () {
     // Users
     Route::resource('users', UserController::class);
     Route::post('/users/change-password/{id}', [UserController::class, 'changePassword']);
+    Route::resource('notifications', NotificationController::class, [
+        'only' => ['index', 'show', 'store', 'destroy']
+    ]);
+    Route::post('notifications/mark-all-as-read', [NotificationController::class, 'markAllAsRead']);
 
     // Equipments
     Route::resource('equipments', EquipmentController::class);
