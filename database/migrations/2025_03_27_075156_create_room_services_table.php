@@ -11,9 +11,10 @@ return new class extends Migration {
             $table->id();
             $table->unsignedBigInteger('room_id');
             $table->unsignedBigInteger('service_id');
-            $table->date('effective_date');
-            $table->integer('custom_price');
             $table->string('status', 20)->default('active');
+            $table->integer('price');
+            $table->boolean('is_fixed')->default(false);
+            $table->text('description')->nullable();
             $table->timestamps();
             $table->softDeletes();
 
@@ -21,7 +22,7 @@ return new class extends Migration {
             $table->foreign('service_id')->references('id')->on('services');
         });
     }
-    
+
     public function down(): void
     {
         Schema::dropIfExists('room_services');

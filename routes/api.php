@@ -10,7 +10,6 @@ use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\RoomController;
 use App\Http\Controllers\Api\RoomEquipmentController;
-use App\Http\Controllers\Api\RoomPriceHistoryController;
 use App\Http\Controllers\Api\ServiceController;
 use App\Http\Controllers\Api\StorageController;
 use App\Http\Controllers\Api\SystemSettingController;
@@ -54,7 +53,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Rooms
     Route::resource('rooms', RoomController::class);
-    Route::resource('room-price-histories', RoomPriceHistoryController::class);
     Route::resource('room-equipments', RoomEquipmentController::class);
 
     // Contracts

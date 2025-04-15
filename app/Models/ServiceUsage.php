@@ -8,16 +8,17 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class ServiceUsage extends Model
 {
     use SoftDeletes;
-    
+
     protected $table = 'service_usage';
     protected $fillable = [
         'room_service_id',
         'start_meter',
         'end_meter',
         'usage_value',
-        'period',
+        'month',
+        'year',
         'price_used',
-        'notes'
+        'description'
     ];
 
     public function roomService()

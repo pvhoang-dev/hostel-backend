@@ -13,9 +13,10 @@ class RoomService extends Model
     protected $fillable = [
         'room_id',
         'service_id',
-        'effective_date',
-        'custom_price',
-        'status'
+        'status',
+        'price',
+        'is_fixed',
+        'description'
     ];
 
     public function room()
@@ -26,11 +27,6 @@ class RoomService extends Model
     public function service()
     {
         return $this->belongsTo(Service::class);
-    }
-
-    public function priceHistories()
-    {
-        return $this->hasMany(ServicePriceHistory::class);
     }
 
     public function usages()
@@ -44,9 +40,6 @@ class RoomService extends Model
 
         static::deleting(function ($roomService) {
             if (!$roomService->isForceDeleting()) {
-                foreach ($roomService->priceHistories as $history) {
-                    $history->delete();
-                }
                 foreach ($roomService->usages as $usage) {
                     $usage->delete();
                 }

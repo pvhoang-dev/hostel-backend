@@ -13,10 +13,9 @@ class Invoice extends Model
         'room_id',
         'invoice_type',
         'total_amount',
-        'period_start',
-        'period_end',
-        'due_date',
-        'payment_status',
+        'month',
+        'year',
+        'description',
         'created_by',
         'updated_by'
     ];

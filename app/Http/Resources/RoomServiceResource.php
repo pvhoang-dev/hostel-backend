@@ -13,9 +13,10 @@ class RoomServiceResource extends JsonResource
     {
         return [
             'id'             => $this->id,
-            'effective_date' => $this->effective_date,
-            'custom_price'   => $this->custom_price,
+            'price'          => $this->price,
             'status'         => $this->status,
+            'is_fixed'       => $this->is_fixed,
+            'description'    => $this->description,
             // 'room'           => new RoomResource($this->whenLoaded('room')),
             'service'        => new ServiceResource($this->whenLoaded('service')),
             'created_at'     => $this->created_at,

@@ -15,18 +15,12 @@ class House extends Model
         'manager_id',
         'status',
         'description',
-        'created_by',
         'updated_by'
     ];
 
     public function manager()
     {
         return $this->belongsTo(User::class, 'manager_id');
-    }
-
-    public function creator()
-    {
-        return $this->belongsTo(User::class, 'created_by');
     }
 
     public function updater()

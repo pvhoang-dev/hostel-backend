@@ -17,7 +17,6 @@ class HouseResource extends JsonResource
             'status'      => $this->status,
             'description' => $this->description,
             'manager'     => new UserResource($this->whenLoaded('manager')),
-            'created_by'  => new UserResource($this->whenLoaded('creator')),
             'updated_by'  => new UserResource($this->whenLoaded('updater')),
             'created_at'  => $this->created_at->format('H:i:s d/m/Y'),
             'updated_at'  => $this->updated_at->format('H:i:s d/m/Y'),

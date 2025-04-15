@@ -9,12 +9,11 @@ return new class extends Migration {
     {
         Schema::create('room_equipments', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('equipment_id')->nullable();
+            $table->unsignedBigInteger('equipment_id');
             $table->unsignedBigInteger('room_id');
             $table->enum('source', ['storage', 'custom']);
             $table->integer('quantity');
             $table->integer('price');
-            $table->string('custom_name', 100)->nullable();
             $table->text('description')->nullable();
             $table->timestamps();
             $table->softDeletes();
@@ -23,7 +22,7 @@ return new class extends Migration {
             $table->foreign('equipment_id')->references('id')->on('equipments');
         });
     }
-    
+
     public function down(): void
     {
         Schema::dropIfExists('room_equipments');

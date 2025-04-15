@@ -11,15 +11,18 @@ class InvoiceItem extends Model
     protected $fillable = [
         'invoice_id',
         'source_type',
-        'source_id',
-        'item_type',
+        'service_usage_id',
         'amount',
         'description',
-        'period'
     ];
 
     public function invoice()
     {
         return $this->belongsTo(Invoice::class);
+    }
+
+    public function service_usage()
+    {
+        return $this->has(ServiceUsage::class);
     }
 }

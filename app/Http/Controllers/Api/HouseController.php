@@ -56,7 +56,7 @@ class HouseController extends BaseController
         $input['updated_by'] = $currentUser->id;
 
         $house = House::create($input);
-        $house->load(['manager', 'creator', 'updater']);
+        $house->load(['manager', 'updater']);
 
         return $this->sendResponse(new HouseResource($house), 'House created successfully.');
     }
@@ -69,7 +69,7 @@ class HouseController extends BaseController
      */
     public function show(string $id): JsonResponse
     {
-        $house = House::with(['manager', 'creator', 'updater'])->find($id);
+        $house = House::with(['manager', 'updater'])->find($id);
 
         if (is_null($house)) {
             return $this->sendError('House not found.');
@@ -130,7 +130,7 @@ class HouseController extends BaseController
         $input['updated_by'] = $currentUser->id;
 
         $house->update($input);
-        $house->load(['manager', 'creator', 'updater']);
+        $house->load(['manager', 'updater']);
 
         return $this->sendResponse(new HouseResource($house), 'House updated successfully.');
     }

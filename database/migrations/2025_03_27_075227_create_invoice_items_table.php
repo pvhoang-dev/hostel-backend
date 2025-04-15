@@ -10,19 +10,17 @@ return new class extends Migration {
         Schema::create('invoice_items', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('invoice_id');
-            $table->enum('source_type', ['recurring_invoice', 'manual', 'service_usage'])->default('manual');
-            $table->unsignedBigInteger('source_id')->nullable();
-            $table->string('item_type', 20);
+            $table->enum('source_type', ['manual', 'service_usage']);
+            $table->unsignedBigInteger('service_usage_id')->nullable();
             $table->integer('amount');
             $table->text('description')->nullable();
-            $table->date('period');
             $table->timestamps();
             $table->softDeletes();
 
             $table->foreign('invoice_id')->references('id')->on('invoices');
         });
     }
-    
+
     public function down(): void
     {
         Schema::dropIfExists('invoice_items');
