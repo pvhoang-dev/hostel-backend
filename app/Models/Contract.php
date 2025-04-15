@@ -44,6 +44,16 @@ class Contract extends Model
         return $this->hasMany(RecurringInvoice::class);
     }
 
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function updater()
+    {
+        return $this->belongsTo(User::class, 'updated_by');
+    }
+
     protected static function boot()
     {
         parent::boot();

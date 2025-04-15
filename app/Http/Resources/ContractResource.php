@@ -14,6 +14,7 @@ class ContractResource extends JsonResource
         return [
             'id'               => $this->id,
             'room'             => new RoomResource($this->whenLoaded('room')),
+            'tenants'          => UserResource::collection($this->whenLoaded('users')),
             'start_date'       => $this->start_date,
             'end_date'         => $this->end_date,
             'monthly_price'    => $this->monthly_price,

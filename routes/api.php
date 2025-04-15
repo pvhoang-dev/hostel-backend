@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\ContractController;
 use App\Http\Controllers\Api\EquipmentController;
 use App\Http\Controllers\Api\HouseController;
 use App\Http\Controllers\Api\HouseSettingController;
@@ -55,4 +56,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::resource('rooms', RoomController::class);
     Route::resource('room-price-histories', RoomPriceHistoryController::class);
     Route::resource('room-equipments', RoomEquipmentController::class);
+
+    // Contracts
+    Route::resource('contracts', ContractController::class);
 });
