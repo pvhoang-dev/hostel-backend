@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\HouseController;
 use App\Http\Controllers\Api\HouseSettingController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PermissionController;
+use App\Http\Controllers\Api\RequestController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\RoomController;
 use App\Http\Controllers\Api\RoomEquipmentController;
@@ -57,4 +58,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Contracts
     Route::resource('contracts', ContractController::class);
+    // Requests
+    Route::resource('requests', RequestController::class);
 });

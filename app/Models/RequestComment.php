@@ -5,18 +5,18 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class MaintenanceComment extends Model
+class RequestComment extends Model
 {
     use SoftDeletes;
     protected $fillable = [
-        'maintenance_request_id',
+        'request_id',
         'user_id',
         'content'
     ];
 
-    public function maintenanceRequest()
+    public function request()
     {
-        return $this->belongsTo(MaintenanceRequest::class);
+        return $this->belongsTo(Request::class);
     }
 
     public function user()

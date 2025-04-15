@@ -2,11 +2,11 @@
 
 namespace App\Http\Resources;
 
+use App\Http\Resources\UserResource;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use App\Http\Resources\UserResource;
 
-class MaintenanceRequestResource extends JsonResource
+class RequestResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
@@ -14,9 +14,9 @@ class MaintenanceRequestResource extends JsonResource
             'id'           => $this->id,
             'description'  => $this->description,
             'status'       => $this->status,
-            'room'        => new RoomResource($this->whenLoaded('room')),
-            'user'         => new UserResource($this->whenLoaded('user')),
-            'created_by'   => new UserResource($this->whenLoaded('creator')),
+            'room'         => new RoomResource($this->whenLoaded('room')),
+            'sender'       => new UserResource($this->whenLoaded('sender')),
+            'recipient'    => new UserResource($this->whenLoaded('recipient')),
             'updated_by'   => new UserResource($this->whenLoaded('updater')),
             'created_at'   => $this->created_at,
             'updated_at'   => $this->updated_at,

@@ -7,21 +7,21 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::create('maintenance_comments', function (Blueprint $table) {
+        Schema::create('request_comments', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('maintenance_request_id');
+            $table->unsignedBigInteger('request_id');
             $table->unsignedBigInteger('user_id');
             $table->text('content');
             $table->timestamps();
             $table->softDeletes();
 
-            $table->foreign('maintenance_request_id')->references('id')->on('maintenance_requests');
+            $table->foreign('request_id')->references('id')->on('requests');
             $table->foreign('user_id')->references('id')->on('users');
         });
     }
-    
+
     public function down(): void
     {
-        Schema::dropIfExists('maintenance_comments');
+        Schema::dropIfExists('request_comments');
     }
 };

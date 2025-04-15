@@ -75,7 +75,7 @@ class User extends Authenticatable
 
     public function maintenanceRequests()
     {
-        return $this->hasMany(MaintenanceRequest::class, 'user_id');
+        return $this->hasMany(Request::class, 'user_id');
     }
 
     public function notifications()
