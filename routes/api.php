@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\ContractController;
 use App\Http\Controllers\Api\EquipmentController;
 use App\Http\Controllers\Api\HouseController;
 use App\Http\Controllers\Api\HouseSettingController;
+use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\RequestCommentController;
@@ -67,4 +68,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Requests
     Route::resource('requests', RequestController::class);
     Route::resource('request-comments', RequestCommentController::class);
+
+    // Invoices
+    Route::resource('invoices', InvoiceController::class);
 });
