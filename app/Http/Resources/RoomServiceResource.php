@@ -17,7 +17,7 @@ class RoomServiceResource extends JsonResource
             'status'         => $this->status,
             'is_fixed'       => $this->is_fixed,
             'description'    => $this->description,
-            // 'room'           => new RoomResource($this->whenLoaded('room')),
+            'room'           => new RoomResource($this->whenLoaded('room')),
             'service'        => new ServiceResource($this->whenLoaded('service')),
             'created_at'     => $this->created_at,
             'updated_at'     => $this->updated_at,
