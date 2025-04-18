@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\HouseController;
 use App\Http\Controllers\Api\HouseSettingController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\PaymentMethodController;
 use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\RequestCommentController;
 use App\Http\Controllers\Api\RequestController;
@@ -71,4 +72,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Invoices
     Route::resource('invoices', InvoiceController::class);
+
+    // Payment Methods
+    Route::resource('payment-methods', PaymentMethodController::class);
 });
