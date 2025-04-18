@@ -13,7 +13,7 @@ class TransactionResource extends JsonResource
     {
         return [
             'id'                => $this->id,
-            // 'invoice'           => new InvoiceResource($this->whenLoaded('invoice')),
+            'invoice'           => new InvoiceResource($this->whenLoaded('invoice')),
             'payment_method'    => new PaymentMethodResource($this->whenLoaded('paymentMethod')),
             'amount'            => $this->amount,
             'transaction_code'  => $this->transaction_code,

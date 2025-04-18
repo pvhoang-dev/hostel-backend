@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\ServiceController;
 use App\Http\Controllers\Api\ServiceUsageController;
 use App\Http\Controllers\Api\StorageController;
 use App\Http\Controllers\Api\SystemSettingController;
+use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -75,4 +76,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Payment Methods
     Route::resource('payment-methods', PaymentMethodController::class);
+
+    // Transactions
+    Route::resource('transactions', TransactionController::class);
 });
