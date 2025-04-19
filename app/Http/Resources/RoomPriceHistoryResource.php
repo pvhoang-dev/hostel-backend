@@ -15,7 +15,7 @@ class RoomPriceHistoryResource extends JsonResource
             'price'          => $this->price,
             'effective_from' => $this->effective_from,
             'effective_to'   => $this->effective_to,
-            // 'room'           => new RoomResource($this->whenLoaded('room')),
+            'room'           => new RoomResource($this->whenLoaded('room')),
             'created_at'     => $this->created_at,
             'updated_at'     => $this->updated_at,
         ];

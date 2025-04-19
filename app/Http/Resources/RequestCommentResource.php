@@ -13,7 +13,7 @@ class RequestCommentResource extends JsonResource
     {
         return [
             'id'                     => $this->id,
-            // 'request'    => new RequestsResource($this->whenLoaded('request')),
+            'request'    => new RequestsResource($this->whenLoaded('request')),
             'user'                   => new UserResource($this->whenLoaded('user')),
             'content'                => $this->content,
             'created_at'             => $this->created_at,

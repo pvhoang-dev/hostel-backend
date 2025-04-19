@@ -19,7 +19,7 @@ class ServiceUsageResource extends JsonResource
             'year'            => $this->year,
             'price_used'      => $this->price_used,
             'description'     => $this->description,
-            // 'room_service'    => new RoomServiceResource($this->whenLoaded('roomService')),
+            'room_service'    => new RoomServiceResource($this->whenLoaded('roomService')),
             'created_at'      => $this->created_at,
             'updated_at'      => $this->updated_at,
         ];

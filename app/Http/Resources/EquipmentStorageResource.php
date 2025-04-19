@@ -16,7 +16,7 @@ class EquipmentStorageResource extends JsonResource
             'quantity'     => $this->quantity,
             'price'        => $this->price,
             'description'  => $this->description,
-            // 'house'        => new HouseResource($this->whenLoaded('house')),
+            'house'        => new HouseResource($this->whenLoaded('house')),
             'equipment'    => new EquipmentResource($this->whenLoaded('equipment')),
             'created_at'   => $this->created_at,
             'updated_at'   => $this->updated_at,

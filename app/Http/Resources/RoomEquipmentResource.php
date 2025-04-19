@@ -17,7 +17,7 @@ class RoomEquipmentResource extends JsonResource
             'quantity'     => $this->quantity,
             'price'        => $this->price,
             'description'  => $this->description,
-            // 'room'         => new RoomResource($this->whenLoaded('room')),
+            'room'         => new RoomResource($this->whenLoaded('room')),
             'equipment'    => new EquipmentResource($this->whenLoaded('equipment')),
             'created_at'   => $this->created_at,
             'updated_at'   => $this->updated_at,
