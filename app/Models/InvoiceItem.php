@@ -23,6 +23,6 @@ class InvoiceItem extends Model
 
     public function service_usage()
     {
-        return $this->has(ServiceUsage::class);
+        return $this->belongsTo(ServiceUsage::class);
     }
 }
