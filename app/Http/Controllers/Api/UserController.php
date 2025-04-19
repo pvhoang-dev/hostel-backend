@@ -15,13 +15,102 @@ class UserController extends BaseController
     /**
      * Display a listing of the users.
      *
-     * @return \Illuminate\Http\Response
+     * @param Request $request
+     * @return JsonResponse
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $users = User::with('role')->get();
+        $currentUser = auth()->user();
+        $query = User::query();
 
-        return $this->sendResponse(UserResource::collection($users), 'Users retrieved successfully.');
+        // Apply role-based access control
+        if ($currentUser->role->code !== 'admin') {
+            // Non-admins can only see their own profile
+            $query->where('id', $currentUser->id);
+        }
+
+        // Apply filters
+        if ($request->has('username')) {
+            $query->where('username', 'like', '%' . $request->username . '%');
+        }
+
+        if ($request->has('name')) {
+            $query->where('name', 'like', '%' . $request->name . '%');
+        }
+
+        if ($request->has('email')) {
+            $query->where('email', 'like', '%' . $request->email . '%');
+        }
+
+        if ($request->has('phone_number')) {
+            $query->where('phone_number', 'like', '%' . $request->phone_number . '%');
+        }
+
+        if ($request->has('hometown')) {
+            $query->where('hometown', 'like', '%' . $request->hometown . '%');
+        }
+
+        if ($request->has('identity_card')) {
+            $query->where('identity_card', 'like', '%' . $request->identity_card . '%');
+        }
+
+        if ($request->has('vehicle_plate')) {
+            $query->where('vehicle_plate', 'like', '%' . $request->vehicle_plate . '%');
+        }
+
+        if ($request->has('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->has('role_id')) {
+            $query->where('role_id', $request->role_id);
+        }
+
+        // Date range filters
+        if ($request->has('created_from')) {
+            $query->where('created_at', '>=', $request->created_from);
+        }
+
+        if ($request->has('created_to')) {
+            $query->where('created_at', '<=', $request->created_to);
+        }
+
+        if ($request->has('updated_from')) {
+            $query->where('updated_at', '>=', $request->updated_from);
+        }
+
+        if ($request->has('updated_to')) {
+            $query->where('updated_at', '<=', $request->updated_to);
+        }
+
+        // Include relationships
+        $with = ['role'];
+        if ($request->has('include')) {
+            $includes = explode(',', $request->include);
+            // Add additional relationships if needed
+            if (in_array('contracts', $includes)) $with[] = 'contracts';
+            if (in_array('managedHouses', $includes)) $with[] = 'managedHouses';
+        }
+
+        // Sorting
+        $sortField = $request->get('sort_by', 'id');
+        $sortDirection = $request->get('sort_dir', 'asc');
+        $allowedSortFields = ['id', 'username', 'name', 'email', 'status', 'role_id', 'created_at', 'updated_at'];
+
+        if (in_array($sortField, $allowedSortFields)) {
+            $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
+        } else {
+            $query->orderBy('id', 'asc');
+        }
+
+        // Pagination
+        $perPage = $request->get('per_page', 15);
+        $users = $query->with($with)->paginate($perPage);
+
+        return $this->sendResponse(
+            UserResource::collection($users)->response()->getData(true),
+            'Users retrieved successfully.'
+        );
     }
 
     /**

@@ -64,6 +64,28 @@ class RequestController extends BaseController
             $query->where('request_type', $httpRequest->request_type);
         }
 
+        // Text search in description
+        if ($httpRequest->has('description')) {
+            $query->where('description', 'like', '%' . $httpRequest->description . '%');
+        }
+
+        // Date range filters
+        if ($httpRequest->has('created_from')) {
+            $query->where('created_at', '>=', $httpRequest->created_from);
+        }
+
+        if ($httpRequest->has('created_to')) {
+            $query->where('created_at', '<=', $httpRequest->created_to);
+        }
+
+        if ($httpRequest->has('updated_from')) {
+            $query->where('updated_at', '>=', $httpRequest->updated_from);
+        }
+
+        if ($httpRequest->has('updated_to')) {
+            $query->where('updated_at', '<=', $httpRequest->updated_to);
+        }
+
         // Include relationships
         $with = [];
         if ($httpRequest->has('include')) {
@@ -75,7 +97,20 @@ class RequestController extends BaseController
             if (in_array('updater', $includes)) $with[] = 'updater';
         }
 
-        $requests = $query->with($with)->orderBy('created_at', 'desc')->paginate(15);
+        // Sorting
+        $sortField = $httpRequest->get('sort_by', 'created_at');
+        $sortDirection = $httpRequest->get('sort_dir', 'desc');
+        $allowedSortFields = ['id', 'created_at', 'updated_at', 'status', 'request_type'];
+
+        if (in_array($sortField, $allowedSortFields)) {
+            $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
+        } else {
+            $query->orderBy('created_at', 'desc');
+        }
+
+        // Pagination
+        $perPage = $httpRequest->get('per_page', 15);
+        $requests = $query->with($with)->paginate($perPage);
 
         return $this->sendResponse(
             RequestResource::collection($requests)->response()->getData(true),

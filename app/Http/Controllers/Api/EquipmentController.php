@@ -17,13 +17,62 @@
     {
         /**
          * Display a listing of the resource.
+         *
+         * @param Request $request
+         * @return JsonResponse
          */
-        public function index()
+        public function index(Request $request): JsonResponse
         {
-            $equipments = Equipment::all();
+            $query = Equipment::query();
+
+            // Filter by name
+            if ($request->has('name')) {
+                $query->where('name', 'like', '%' . $request->name . '%');
+            }
+
+            // Filter by room_id - find equipment linked to specific rooms
+            if ($request->has('room_id')) {
+                $query->whereHas('roomEquipments', function ($q) use ($request) {
+                    $q->where('room_id', $request->room_id);
+                });
+            }
+
+            // Filter by storage_id - find equipment linked to specific storage
+            if ($request->has('storage_id')) {
+                $query->whereHas('storages', function ($q) use ($request) {
+                    $q->where('storage_id', $request->storage_id);
+                });
+            }
+
+            // Include relationships
+            $with = [];
+            if ($request->has('include')) {
+                $includes = explode(',', $request->include);
+                if (in_array('storages', $includes)) $with[] = 'storages';
+                if (in_array('roomEquipments', $includes)) $with[] = 'roomEquipments';
+            }
+
+            if (!empty($with)) {
+                $query->with($with);
+            }
+
+            // Sorting
+            $sortField = $request->get('sort_by', 'name');
+            $sortDirection = $request->get('sort_dir', 'asc');
+            $allowedSortFields = ['id', 'name', 'created_at', 'updated_at'];
+
+            if (in_array($sortField, $allowedSortFields)) {
+                $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
+            } else {
+                $query->orderBy('name', 'asc');
+            }
+
+            // Pagination
+            $perPage = $request->get('per_page', 15);
+            $equipments = $query->paginate($perPage);
 
             return $this->sendResponse(
-                EquipmentResource::collection($equipments),
+                EquipmentResource::collection($equipments)->response()->getData(true),
                 'Equipments retrieved successfully'
             );
         }

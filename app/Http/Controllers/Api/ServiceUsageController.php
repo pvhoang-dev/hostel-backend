@@ -42,12 +42,76 @@ class ServiceUsageController extends BaseController
             $query->where('room_service_id', $request->room_service_id);
         }
 
+        if ($request->has('room_id')) {
+            $query->whereHas('roomService', function($q) use ($request) {
+                $q->where('room_id', $request->room_id);
+            });
+        }
+
+        if ($request->has('service_id')) {
+            $query->whereHas('roomService', function($q) use ($request) {
+                $q->where('service_id', $request->service_id);
+            });
+        }
+
         if ($request->has('month')) {
             $query->where('month', $request->month);
         }
 
         if ($request->has('year')) {
             $query->where('year', $request->year);
+        }
+
+        // Usage value range filters
+        if ($request->has('min_usage')) {
+            $query->where('usage_value', '>=', $request->min_usage);
+        }
+
+        if ($request->has('max_usage')) {
+            $query->where('usage_value', '<=', $request->max_usage);
+        }
+
+        // Price used range filters
+        if ($request->has('min_price')) {
+            $query->where('price_used', '>=', $request->min_price);
+        }
+
+        if ($request->has('max_price')) {
+            $query->where('price_used', '<=', $request->max_price);
+        }
+
+        // Meter reading filters
+        if ($request->has('min_start_meter')) {
+            $query->where('start_meter', '>=', $request->min_start_meter);
+        }
+
+        if ($request->has('max_start_meter')) {
+            $query->where('start_meter', '<=', $request->max_start_meter);
+        }
+
+        if ($request->has('min_end_meter')) {
+            $query->where('end_meter', '>=', $request->min_end_meter);
+        }
+
+        if ($request->has('max_end_meter')) {
+            $query->where('end_meter', '<=', $request->max_end_meter);
+        }
+
+        // Date range filters
+        if ($request->has('created_from')) {
+            $query->where('created_at', '>=', $request->created_from);
+        }
+
+        if ($request->has('created_to')) {
+            $query->where('created_at', '<=', $request->created_to);
+        }
+
+        if ($request->has('updated_from')) {
+            $query->where('updated_at', '>=', $request->updated_from);
+        }
+
+        if ($request->has('updated_to')) {
+            $query->where('updated_at', '<=', $request->updated_to);
         }
 
         // Include relationships
@@ -57,11 +121,27 @@ class ServiceUsageController extends BaseController
             if (in_array('roomService', $includes)) $with[] = 'roomService';
             if (in_array('roomService.room', $includes)) $with[] = 'roomService.room';
             if (in_array('roomService.service', $includes)) $with[] = 'roomService.service';
+            if (in_array('roomService.room.house', $includes)) $with[] = 'roomService.room.house';
+            if (in_array('invoiceItems', $includes)) $with[] = 'invoiceItems';
         }
 
-        $serviceUsages = $query->with($with)->orderBy('year', 'desc')
-            ->orderBy('month', 'desc')
-            ->paginate(15);
+        // Sorting
+        $sortField = $request->get('sort_by', 'year');
+        $sortDirection = $request->get('sort_dir', 'desc');
+        $allowedSortFields = [
+            'id', 'room_service_id', 'start_meter', 'end_meter', 'usage_value',
+            'month', 'year', 'price_used', 'created_at', 'updated_at'
+        ];
+
+        if (in_array($sortField, $allowedSortFields)) {
+            $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
+        } else {
+            $query->orderBy('year', 'desc')->orderBy('month', 'desc');
+        }
+
+        // Pagination
+        $perPage = $request->get('per_page', 15);
+        $serviceUsages = $query->with($with)->paginate($perPage);
 
         return $this->sendResponse(
             ServiceUsageResource::collection($serviceUsages)->response()->getData(true),

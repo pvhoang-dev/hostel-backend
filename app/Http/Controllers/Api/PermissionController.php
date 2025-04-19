@@ -13,12 +13,69 @@ class PermissionController extends BaseController
     /**
      * Display a listing of the resource.
      *
-     * @return \Illuminate\Http\Response
+     * @param Request $request
+     * @return JsonResponse
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $permissions = Permission::all();
-        return $this->sendResponse(PermissionResource::collection($permissions), 'Permissions retrieved successfully.');
+        $query = Permission::query();
+
+        // Filter by name
+        if ($request->has('name')) {
+            $query->where('name', 'like', '%' . $request->name . '%');
+        }
+
+        // Filter by code
+        if ($request->has('code')) {
+            $query->where('code', 'like', '%' . $request->code . '%');
+        }
+
+        // Filter by exact code match
+        if ($request->has('code_exact')) {
+            $query->where('code', $request->code_exact);
+        }
+
+        // Filter by description
+        if ($request->has('description')) {
+            $query->where('description', 'like', '%' . $request->description . '%');
+        }
+
+        // Date range filters
+        if ($request->has('created_from')) {
+            $query->where('created_at', '>=', $request->created_from);
+        }
+
+        if ($request->has('created_to')) {
+            $query->where('created_at', '<=', $request->created_to);
+        }
+
+        if ($request->has('updated_from')) {
+            $query->where('updated_at', '>=', $request->updated_from);
+        }
+
+        if ($request->has('updated_to')) {
+            $query->where('updated_at', '<=', $request->updated_to);
+        }
+
+        // Sorting
+        $sortField = $request->get('sort_by', 'id');
+        $sortDirection = $request->get('sort_dir', 'asc');
+        $allowedSortFields = ['id', 'name', 'code', 'created_at', 'updated_at'];
+
+        if (in_array($sortField, $allowedSortFields)) {
+            $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
+        } else {
+            $query->orderBy('id', 'asc');
+        }
+
+        // Pagination
+        $perPage = $request->get('per_page', 15);
+        $permissions = $query->paginate($perPage);
+
+        return $this->sendResponse(
+            PermissionResource::collection($permissions)->response()->getData(true),
+            'Permissions retrieved successfully.'
+        );
     }
 
     /**

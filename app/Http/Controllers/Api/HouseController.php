@@ -14,14 +14,82 @@ class HouseController extends BaseController
     /**
      * Display a listing of the houses.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @param Request $request
+     * @return JsonResponse
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $houses = House::with(['manager'])->get();
+        $query = House::query();
+
+        // Filter by name
+        if ($request->has('name')) {
+            $query->where('name', 'like', '%' . $request->name . '%');
+        }
+
+        // Filter by status
+        if ($request->has('status')) {
+            $query->where('status', $request->status);
+        }
+
+        // Filter by manager_id
+        if ($request->has('manager_id')) {
+            $query->where('manager_id', $request->manager_id);
+        }
+
+        // Filter by address
+        if ($request->has('address')) {
+            $query->where('address', 'like', '%' . $request->address . '%');
+        }
+
+        // Filter by created/updated date ranges
+        if ($request->has('created_from')) {
+            $query->where('created_at', '>=', $request->created_from);
+        }
+
+        if ($request->has('created_to')) {
+            $query->where('created_at', '<=', $request->created_to);
+        }
+
+        if ($request->has('updated_from')) {
+            $query->where('updated_at', '>=', $request->updated_from);
+        }
+
+        if ($request->has('updated_to')) {
+            $query->where('updated_at', '<=', $request->updated_to);
+        }
+
+        // Include relationships
+        $with = ['manager'];
+
+        if ($request->has('include')) {
+            $includes = explode(',', $request->include);
+            if (in_array('updater', $includes)) {
+                $with[] = 'updater';
+            }
+            if (in_array('rooms', $includes)) {
+                $with[] = 'rooms';
+            }
+        }
+
+        $query->with($with);
+
+        // Sorting
+        $sortField = $request->get('sort_by', 'created_at');
+        $sortDirection = $request->get('sort_dir', 'desc');
+        $allowedSortFields = ['id', 'name', 'created_at', 'updated_at', 'status', 'address'];
+
+        if (in_array($sortField, $allowedSortFields)) {
+            $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
+        } else {
+            $query->latest();
+        }
+
+        // Pagination
+        $perPage = $request->get('per_page', 15);
+        $houses = $query->paginate($perPage);
 
         return $this->sendResponse(
-            HouseResource::collection($houses),
+            HouseResource::collection($houses)->response()->getData(true),
             'Houses retrieved successfully.'
         );
     }

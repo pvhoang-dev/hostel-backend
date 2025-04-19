@@ -26,6 +26,12 @@ class AuthController extends BaseController
             $token = $user->createToken('MyApp', ['*'], now()->addHours(1));
             $success['token'] = $token->plainTextToken;
             $success['name']  = $user->name;
+            $success['user']  = [
+                'id'        => $user->id,
+                'username'  => $user->username,
+                'email'     => $user->email,
+                'role'      => $user->role->code,
+            ];
 
             return $this->sendResponse($success, 'User login successfully.');
         } else {

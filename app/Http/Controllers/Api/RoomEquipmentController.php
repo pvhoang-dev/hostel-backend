@@ -16,12 +16,97 @@ class RoomEquipmentController extends BaseController
     /**
      * Display a listing of the resource.
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $roomEquipments = RoomEquipment::with(['room', 'equipment'])->get();
+        $user = auth()->user();
+        $query = RoomEquipment::query();
+
+        // Apply role-based filters
+        if ($user->role->code === 'manager') {
+            // Managers can only see equipment in rooms of houses they manage
+            $query->whereHas('room.house', function ($q) use ($user) {
+                $q->where('manager_id', $user->id);
+            });
+        } elseif ($user->role->code === 'tenant') {
+            // Tenants can only see equipment in rooms they occupy
+            $query->whereHas('room.contracts.tenants', function ($q) use ($user) {
+                $q->where('users.id', $user->id);
+            });
+        }
+        // Admins can see all equipment, so no filter needed
+
+        // Apply additional filters
+        if ($request->has('room_id')) {
+            $query->where('room_id', $request->room_id);
+        }
+
+        if ($request->has('equipment_id')) {
+            $query->where('equipment_id', $request->equipment_id);
+        }
+
+        if ($request->has('source')) {
+            $query->where('source', $request->source);
+        }
+
+        if ($request->has('min_quantity')) {
+            $query->where('quantity', '>=', $request->min_quantity);
+        }
+
+        if ($request->has('max_quantity')) {
+            $query->where('quantity', '<=', $request->max_quantity);
+        }
+
+        if ($request->has('min_price')) {
+            $query->where('price', '>=', $request->min_price);
+        }
+
+        if ($request->has('max_price')) {
+            $query->where('price', '<=', $request->max_price);
+        }
+
+        // Filter by date ranges
+        if ($request->has('created_from')) {
+            $query->where('created_at', '>=', $request->created_from);
+        }
+
+        if ($request->has('created_to')) {
+            $query->where('created_at', '<=', $request->created_to);
+        }
+
+        if ($request->has('updated_from')) {
+            $query->where('updated_at', '>=', $request->updated_from);
+        }
+
+        if ($request->has('updated_to')) {
+            $query->where('updated_at', '<=', $request->updated_to);
+        }
+
+        // Include relationships
+        $with = [];
+        if ($request->has('include')) {
+            $includes = explode(',', $request->include);
+            if (in_array('room', $includes)) $with[] = 'room';
+            if (in_array('equipment', $includes)) $with[] = 'equipment';
+            if (in_array('room.house', $includes)) $with[] = 'room.house';
+        }
+
+        // Sorting
+        $sortField = $request->get('sort_by', 'id');
+        $sortDirection = $request->get('sort_dir', 'asc');
+        $allowedSortFields = ['id', 'room_id', 'equipment_id', 'quantity', 'price', 'created_at', 'updated_at'];
+
+        if (in_array($sortField, $allowedSortFields)) {
+            $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
+        } else {
+            $query->orderBy('id', 'asc');
+        }
+
+        // Pagination
+        $perPage = $request->get('per_page', 15);
+        $roomEquipments = $query->with($with)->paginate($perPage);
 
         return $this->sendResponse(
-            RoomEquipmentResource::collection($roomEquipments),
+            RoomEquipmentResource::collection($roomEquipments)->response()->getData(true),
             'Room equipments retrieved successfully.'
         );
     }

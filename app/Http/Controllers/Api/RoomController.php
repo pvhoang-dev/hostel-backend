@@ -15,14 +15,99 @@ class RoomController extends BaseController
     /**
      * Display a listing of the rooms.
      *
+     * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $rooms = Room::with(['house'])->get();
+        $user = auth()->user();
+        $query = Room::query();
+
+        // Apply role-based filters
+        if ($user && $user->role->code === 'manager') {
+            // Managers can only see rooms in houses they manage
+            $managedHouseIds = House::where('manager_id', $user->id)->pluck('id');
+            $query->whereIn('house_id', $managedHouseIds);
+        }
+        // Admins can see all rooms (no filter)
+
+        // Apply additional filters
+        if ($request->has('house_id')) {
+            $query->where('house_id', $request->house_id);
+        }
+
+        if ($request->has('room_number')) {
+            $query->where('room_number', 'like', '%' . $request->room_number . '%');
+        }
+
+        if ($request->has('capacity')) {
+            $query->where('capacity', $request->capacity);
+        }
+
+        if ($request->has('min_capacity')) {
+            $query->where('capacity', '>=', $request->min_capacity);
+        }
+
+        if ($request->has('max_capacity')) {
+            $query->where('capacity', '<=', $request->max_capacity);
+        }
+
+        if ($request->has('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->has('min_price')) {
+            $query->where('base_price', '>=', $request->min_price);
+        }
+
+        if ($request->has('max_price')) {
+            $query->where('base_price', '<=', $request->max_price);
+        }
+
+        // Filter by date ranges
+        if ($request->has('created_from')) {
+            $query->where('created_at', '>=', $request->created_from);
+        }
+
+        if ($request->has('created_to')) {
+            $query->where('created_at', '<=', $request->created_to);
+        }
+
+        if ($request->has('updated_from')) {
+            $query->where('updated_at', '>=', $request->updated_from);
+        }
+
+        if ($request->has('updated_to')) {
+            $query->where('updated_at', '<=', $request->updated_to);
+        }
+
+        // Include relationships
+        $with = ['house'];
+        if ($request->has('include')) {
+            $includes = explode(',', $request->include);
+            if (in_array('services', $includes)) $with[] = 'services';
+            if (in_array('contracts', $includes)) $with[] = 'contracts';
+            if (in_array('creator', $includes)) $with[] = 'creator';
+            if (in_array('updater', $includes)) $with[] = 'updater';
+        }
+
+        // Sorting
+        $sortField = $request->get('sort_by', 'created_at');
+        $sortDirection = $request->get('sort_dir', 'desc');
+        $allowedSortFields = ['id', 'house_id', 'room_number', 'capacity', 'base_price', 'status', 'created_at', 'updated_at'];
+
+        if (in_array($sortField, $allowedSortFields)) {
+            $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
+        } else {
+            $query->orderBy('created_at', 'desc');
+        }
+
+        // Pagination
+        $perPage = $request->get('per_page', 15);
+        $rooms = $query->with($with)->paginate($perPage);
 
         return $this->sendResponse(
-            RoomResource::collection($rooms),
+            RoomResource::collection($rooms)->response()->getData(true),
             'Rooms retrieved successfully.'
         );
     }

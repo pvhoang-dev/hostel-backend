@@ -15,7 +15,7 @@ class PaymentMethodController extends BaseController
     /**
      * Display a listing of the resource.
      */
-    public function index(HttpRequest $httpRequest): JsonResponse
+    public function index(HttpRequest $request): JsonResponse
     {
         $user = Auth::user();
         $query = PaymentMethod::query();
@@ -26,15 +26,56 @@ class PaymentMethodController extends BaseController
         }
 
         // Apply filters
-        if ($httpRequest->has('status') && in_array($user->role->code, ['admin', 'manager'])) {
-            $query->where('status', $httpRequest->status);
+        if ($request->has('status') && in_array($user->role->code, ['admin', 'manager'])) {
+            $query->where('status', $request->status);
         }
 
-        if ($httpRequest->has('name')) {
-            $query->where('name', 'like', '%' . $httpRequest->name . '%');
+        if ($request->has('name')) {
+            $query->where('name', 'like', '%' . $request->name . '%');
         }
 
-        $paymentMethods = $query->orderBy('created_at', 'desc')->paginate(15);
+        if ($request->has('id')) {
+            $query->where('id', $request->id);
+        }
+
+        // Date range filters
+        if ($request->has('created_from')) {
+            $query->where('created_at', '>=', $request->created_from);
+        }
+
+        if ($request->has('created_to')) {
+            $query->where('created_at', '<=', $request->created_to);
+        }
+
+        if ($request->has('updated_from')) {
+            $query->where('updated_at', '>=', $request->updated_from);
+        }
+
+        if ($request->has('updated_to')) {
+            $query->where('updated_at', '<=', $request->updated_to);
+        }
+
+        // Include relationships if needed
+        $with = [];
+        if ($request->has('include')) {
+            $includes = explode(',', $request->include);
+            if (in_array('transactions', $includes)) $with[] = 'transactions';
+        }
+
+        // Sorting
+        $sortField = $request->get('sort_by', 'created_at');
+        $sortDirection = $request->get('sort_dir', 'desc');
+        $allowedSortFields = ['id', 'name', 'status', 'created_at', 'updated_at'];
+
+        if (in_array($sortField, $allowedSortFields)) {
+            $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
+        } else {
+            $query->orderBy('created_at', 'desc');
+        }
+
+        // Pagination
+        $perPage = $request->get('per_page', 15);
+        $paymentMethods = $query->with($with)->paginate($perPage);
 
         return $this->sendResponse(
             PaymentMethodResource::collection($paymentMethods)->response()->getData(true),

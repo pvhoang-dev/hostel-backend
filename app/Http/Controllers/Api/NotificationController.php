@@ -14,17 +14,72 @@ class NotificationController extends BaseController
     /**
      * Display a listing of the resource.
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         $currentUser = auth()->user();
         if (!$currentUser) {
             return $this->sendError('Unauthorized.', [], 401);
         }
 
-        $notifications = Notification::where('user_id', $currentUser->id)->get();
+        $query = Notification::query();
+
+        // Base filtering - users can only see their own notifications
+        // Admins might be allowed to see all notifications
+        if ($currentUser->role->code !== 'admin') {
+            $query->where('user_id', $currentUser->id);
+        } elseif ($request->has('user_id')) {
+            // Admin can filter by specific user_id
+            $query->where('user_id', $request->user_id);
+        }
+
+        // Filter by type
+        if ($request->has('type')) {
+            $query->where('type', $request->type);
+        }
+
+        // Filter by read status
+        if ($request->has('is_read')) {
+            $isRead = filter_var($request->is_read, FILTER_VALIDATE_BOOLEAN);
+            $query->where('is_read', $isRead);
+        }
+
+        // Filter by date ranges
+        if ($request->has('created_from')) {
+            $query->where('created_at', '>=', $request->created_from);
+        }
+
+        if ($request->has('created_to')) {
+            $query->where('created_at', '<=', $request->created_to);
+        }
+
+        // Include relationships
+        $with = [];
+        if ($request->has('include')) {
+            $includes = explode(',', $request->include);
+            if (in_array('user', $includes)) $with[] = 'user';
+        }
+
+        if (!empty($with)) {
+            $query->with($with);
+        }
+
+        // Sorting
+        $sortField = $request->get('sort_by', 'created_at');
+        $sortDirection = $request->get('sort_dir', 'desc');
+        $allowedSortFields = ['id', 'type', 'created_at', 'is_read'];
+
+        if (in_array($sortField, $allowedSortFields)) {
+            $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
+        } else {
+            $query->latest();
+        }
+
+        // Pagination
+        $perPage = $request->get('per_page', 15);
+        $notifications = $query->paginate($perPage);
 
         return $this->sendResponse(
-            NotificationResource::collection($notifications),
+            NotificationResource::collection($notifications)->response()->getData(true),
             'Notifications retrieved successfully.'
         );
     }

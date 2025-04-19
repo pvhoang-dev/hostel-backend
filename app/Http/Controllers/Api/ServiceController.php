@@ -18,14 +18,76 @@ class ServiceController extends BaseController
     /**
      * Display a listing of the resource.
      *
+     * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $services = Service::all();
+        $query = Service::query();
+
+        // Apply filters
+        if ($request->has('name')) {
+            $query->where('name', 'like', '%' . $request->name . '%');
+        }
+
+        if ($request->has('unit')) {
+            $query->where('unit', 'like', '%' . $request->unit . '%');
+        }
+
+        if ($request->has('is_metered') && in_array($request->is_metered, ['0', '1'])) {
+            $query->where('is_metered', $request->is_metered);
+        }
+
+        // Price range filters
+        if ($request->has('min_price')) {
+            $query->where('default_price', '>=', $request->min_price);
+        }
+
+        if ($request->has('max_price')) {
+            $query->where('default_price', '<=', $request->max_price);
+        }
+
+        // Date range filters
+        if ($request->has('created_from')) {
+            $query->where('created_at', '>=', $request->created_from);
+        }
+
+        if ($request->has('created_to')) {
+            $query->where('created_at', '<=', $request->created_to);
+        }
+
+        if ($request->has('updated_from')) {
+            $query->where('updated_at', '>=', $request->updated_from);
+        }
+
+        if ($request->has('updated_to')) {
+            $query->where('updated_at', '<=', $request->updated_to);
+        }
+
+        // Include relationships
+        $with = [];
+        if ($request->has('include')) {
+            $includes = explode(',', $request->include);
+            if (in_array('roomServices', $includes)) $with[] = 'roomServices';
+        }
+
+        // Sorting
+        $sortField = $request->get('sort_by', 'name');
+        $sortDirection = $request->get('sort_dir', 'asc');
+        $allowedSortFields = ['id', 'name', 'default_price', 'unit', 'is_metered', 'created_at', 'updated_at'];
+
+        if (in_array($sortField, $allowedSortFields)) {
+            $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
+        } else {
+            $query->orderBy('name', 'asc');
+        }
+
+        // Pagination
+        $perPage = $request->get('per_page', 15);
+        $services = $query->with($with)->paginate($perPage);
 
         return $this->sendResponse(
-            ServiceResource::collection($services),
+            ServiceResource::collection($services)->response()->getData(true),
             'Services retrieved successfully'
         );
     }

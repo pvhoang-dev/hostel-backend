@@ -18,13 +18,78 @@ class SystemSettingController extends BaseController
 {
     /**
      * Display a listing of the resource.
+     *
+     * @param Request $request
+     * @return JsonResponse
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $systemSettings = SystemSetting::all();
+        $query = SystemSetting::query();
+
+        // Apply filters for text fields
+        if ($request->has('key')) {
+            $query->where('key', 'like', '%' . $request->key . '%');
+        }
+
+        if ($request->has('value')) {
+            $query->where('value', 'like', '%' . $request->value . '%');
+        }
+
+        if ($request->has('description')) {
+            $query->where('description', 'like', '%' . $request->description . '%');
+        }
+
+        // Filter by user IDs
+        if ($request->has('created_by')) {
+            $query->where('created_by', $request->created_by);
+        }
+
+        if ($request->has('updated_by')) {
+            $query->where('updated_by', $request->updated_by);
+        }
+
+        // Date range filters
+        if ($request->has('created_from')) {
+            $query->where('created_at', '>=', $request->created_from);
+        }
+
+        if ($request->has('created_to')) {
+            $query->where('created_at', '<=', $request->created_to);
+        }
+
+        if ($request->has('updated_from')) {
+            $query->where('updated_at', '>=', $request->updated_from);
+        }
+
+        if ($request->has('updated_to')) {
+            $query->where('updated_at', '<=', $request->updated_to);
+        }
+
+        // Include relationships if needed
+        $with = [];
+        if ($request->has('include')) {
+            $includes = explode(',', $request->include);
+            if (in_array('creator', $includes)) $with[] = 'creator';
+            if (in_array('updater', $includes)) $with[] = 'updater';
+        }
+
+        // Sorting
+        $sortField = $request->get('sort_by', 'key');
+        $sortDirection = $request->get('sort_dir', 'asc');
+        $allowedSortFields = ['id', 'key', 'value', 'created_at', 'updated_at', 'created_by', 'updated_by'];
+
+        if (in_array($sortField, $allowedSortFields)) {
+            $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
+        } else {
+            $query->orderBy('key', 'asc');
+        }
+
+        // Pagination
+        $perPage = $request->get('per_page', 15);
+        $systemSettings = $query->with($with)->paginate($perPage);
 
         return $this->sendResponse(
-            SystemSettingResource::collection($systemSettings),
+            SystemSettingResource::collection($systemSettings)->response()->getData(true),
             'System settings retrieved successfully'
         );
     }

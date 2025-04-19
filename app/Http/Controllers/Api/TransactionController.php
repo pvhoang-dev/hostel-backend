@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\BaseController as BaseController;
 use App\Http\Resources\TransactionResource;
 use App\Models\Transaction;
 use App\Models\Invoice;
+use App\Models\PaymentMethod;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request as HttpRequest;
 use Illuminate\Support\Facades\Auth;
@@ -62,6 +63,18 @@ class TransactionController extends BaseController
             $query->where('payment_method_id', $httpRequest->payment_method_id);
         }
 
+        if ($httpRequest->has('transaction_code')) {
+            $query->where('transaction_code', 'like', '%' . $httpRequest->transaction_code . '%');
+        }
+
+        if ($httpRequest->has('amount_min')) {
+            $query->where('amount', '>=', $httpRequest->amount_min);
+        }
+
+        if ($httpRequest->has('amount_max')) {
+            $query->where('amount', '<=', $httpRequest->amount_max);
+        }
+
         if ($httpRequest->has('date_from')) {
             $query->whereDate('payment_date', '>=', $httpRequest->date_from);
         }
@@ -70,7 +83,42 @@ class TransactionController extends BaseController
             $query->whereDate('payment_date', '<=', $httpRequest->date_to);
         }
 
-        $transactions = $query->orderBy('payment_date', 'desc')->paginate(15);
+        if ($httpRequest->has('room_id')) {
+            $query->whereHas('invoice.room', function($q) use ($httpRequest) {
+                $q->where('id', $httpRequest->room_id);
+            });
+        }
+
+        if ($httpRequest->has('house_id')) {
+            $query->whereHas('invoice.room.house', function($q) use ($httpRequest) {
+                $q->where('id', $httpRequest->house_id);
+            });
+        }
+
+        // Sorting
+        $sortField = $httpRequest->get('sort_by', 'payment_date');
+        $sortDirection = $httpRequest->get('sort_direction', 'desc');
+
+        // Validate sort field to prevent SQL injection
+        $allowedSortFields = ['id', 'transaction_code', 'amount', 'status', 'payment_date', 'created_at'];
+        if (!in_array($sortField, $allowedSortFields)) {
+            $sortField = 'payment_date';
+        }
+
+        // Validate sort direction
+        if (!in_array($sortDirection, ['asc', 'desc'])) {
+            $sortDirection = 'desc';
+        }
+
+        $query->orderBy($sortField, $sortDirection);
+
+        // Pagination
+        $perPage = $httpRequest->get('per_page', 15);
+        if (!is_numeric($perPage) || $perPage < 1 || $perPage > 100) {
+            $perPage = 15;
+        }
+
+        $transactions = $query->paginate($perPage);
 
         return $this->sendResponse(
             TransactionResource::collection($transactions)->response()->getData(true),
@@ -106,6 +154,16 @@ class TransactionController extends BaseController
             return $this->sendError('Invoice not found.');
         }
 
+        // Verify payment method exists and is active
+        $paymentMethod = PaymentMethod::find($input['payment_method_id']);
+        if (!$paymentMethod) {
+            return $this->sendError('Payment method not found.');
+        }
+
+        if ($paymentMethod->status !== 'active' && $user->role->code !== 'admin') {
+            return $this->sendError('Payment method is not active.');
+        }
+
         $canManage = false;
 
         // Admin can manage all transactions
@@ -132,7 +190,7 @@ class TransactionController extends BaseController
 
         // Generate transaction code if not provided
         if (!isset($input['transaction_code'])) {
-            $input['transaction_code'] = 'TXN-' . Str::random(10) . '-' . time();
+            $input['transaction_code'] = 'TXN-' . Str::random(8) . '-' . time();
         }
 
         $transaction = Transaction::create($input);
@@ -216,6 +274,18 @@ class TransactionController extends BaseController
 
         if ($validator->fails()) {
             return $this->sendError('Validation Error.', $validator->errors());
+        }
+
+        // If changing payment method, verify it exists and is active
+        if (isset($input['payment_method_id'])) {
+            $paymentMethod = PaymentMethod::find($input['payment_method_id']);
+            if (!$paymentMethod) {
+                return $this->sendError('Payment method not found.');
+            }
+
+            if ($paymentMethod->status !== 'active' && !$isAdmin) {
+                return $this->sendError('Payment method is not active.');
+            }
         }
 
         $transaction->update($input);

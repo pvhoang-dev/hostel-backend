@@ -19,14 +19,63 @@ class RoleController extends BaseController
     /**
      * Display a listing of the resource.
      *
-     * @return \Illuminate\Http\Response
+     * @param Request $request
+     * @return JsonResponse
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $roles = Role::all();
+        $query = Role::query();
+
+        // Apply filters
+        if ($request->has('code')) {
+            $query->where('code', 'like', '%' . $request->code . '%');
+        }
+
+        if ($request->has('name')) {
+            $query->where('name', 'like', '%' . $request->name . '%');
+        }
+
+        // Date range filters
+        if ($request->has('created_from')) {
+            $query->where('created_at', '>=', $request->created_from);
+        }
+
+        if ($request->has('created_to')) {
+            $query->where('created_at', '<=', $request->created_to);
+        }
+
+        if ($request->has('updated_from')) {
+            $query->where('updated_at', '>=', $request->updated_from);
+        }
+
+        if ($request->has('updated_to')) {
+            $query->where('updated_at', '<=', $request->updated_to);
+        }
+
+        // Include relationships if needed
+        $with = [];
+        if ($request->has('include')) {
+            $includes = explode(',', $request->include);
+            // Add relationships if needed in the future
+        }
+
+        // Sorting
+        $sortField = $request->get('sort_by', 'id');
+        $sortDirection = $request->get('sort_dir', 'asc');
+        $allowedSortFields = ['id', 'code', 'name', 'created_at', 'updated_at'];
+
+        if (in_array($sortField, $allowedSortFields)) {
+            $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
+        } else {
+            $query->orderBy('id', 'asc');
+        }
+
+        // Pagination
+        $perPage = $request->get('per_page', 15);
+        $roles = $query->with($with)->paginate($perPage);
 
         return $this->sendResponse(
-            RoleResource::collection($roles),
+            RoleResource::collection($roles)->response()->getData(true),
             'Roles retrieved successfully.'
         );
     }

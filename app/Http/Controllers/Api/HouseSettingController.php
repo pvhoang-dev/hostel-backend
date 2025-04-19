@@ -15,13 +15,86 @@ class HouseSettingController extends BaseController
     /**
      * Display a listing of the house settings.
      *
+     * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $settings = HouseSetting::all();
+        $currentUser = auth()->user();
+        $query = HouseSetting::query();
+
+        // Apply role-based filters
+        if ($currentUser && $currentUser->role->code === 'manager') {
+            // Managers can only see settings for houses they manage
+            $query->whereHas('house', function ($q) use ($currentUser) {
+                $q->where('manager_id', $currentUser->id);
+            });
+        }
+        // Admins can see all settings (no filter)
+        // Tenants shouldn't see house settings
+
+        // Filter by house_id
+        if ($request->has('house_id')) {
+            $query->where('house_id', $request->house_id);
+        }
+
+        // Filter by key
+        if ($request->has('key')) {
+            $query->where('key', 'like', '%' . $request->key . '%');
+        }
+
+        // Filter by value
+        if ($request->has('value')) {
+            $query->where('value', 'like', '%' . $request->value . '%');
+        }
+
+        // Filter by date ranges
+        if ($request->has('created_from')) {
+            $query->where('created_at', '>=', $request->created_from);
+        }
+
+        if ($request->has('created_to')) {
+            $query->where('created_at', '<=', $request->created_to);
+        }
+
+        if ($request->has('updated_from')) {
+            $query->where('updated_at', '>=', $request->updated_from);
+        }
+
+        if ($request->has('updated_to')) {
+            $query->where('updated_at', '<=', $request->updated_to);
+        }
+
+        // Include relationships
+        $with = [];
+        if ($request->has('include')) {
+            $includes = explode(',', $request->include);
+            if (in_array('house', $includes)) $with[] = 'house';
+            if (in_array('creator', $includes)) $with[] = 'creator';
+            if (in_array('updater', $includes)) $with[] = 'updater';
+        }
+
+        if (!empty($with)) {
+            $query->with($with);
+        }
+
+        // Sorting
+        $sortField = $request->get('sort_by', 'key');
+        $sortDirection = $request->get('sort_dir', 'desc');
+        $allowedSortFields = ['id', 'key', 'value', 'house_id', 'created_at', 'updated_at'];
+
+        if (in_array($sortField, $allowedSortFields)) {
+            $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
+        } else {
+            $query->latest();
+        }
+
+        // Pagination
+        $perPage = $request->get('per_page', 15);
+        $settings = $query->paginate($perPage);
+
         return $this->sendResponse(
-            HouseSettingResource::collection($settings),
+            HouseSettingResource::collection($settings)->response()->getData(true),
             'House settings retrieved successfully.'
         );
     }

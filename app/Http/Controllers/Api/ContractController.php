@@ -49,11 +49,43 @@ class ContractController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthorized.'], 401);
         }
 
-        $query = Contract::with(['room', 'creator', 'users', 'updater']);
+        $query = Contract::query();
 
         // Filter by status if provided
         if ($request->has('status')) {
             $query->where('status', $request->status);
+        }
+
+        // Filter by room_id
+        if ($request->has('room_id')) {
+            $query->where('room_id', $request->room_id);
+        }
+
+        // Filter by date ranges
+        if ($request->has('start_date_from')) {
+            $query->where('start_date', '>=', $request->start_date_from);
+        }
+
+        if ($request->has('start_date_to')) {
+            $query->where('start_date', '<=', $request->start_date_to);
+        }
+
+        if ($request->has('end_date_from')) {
+            $query->where('end_date', '>=', $request->end_date_from);
+        }
+
+        if ($request->has('end_date_to')) {
+            $query->where('end_date', '<=', $request->end_date_to);
+        }
+
+        // Filter by deposit_status
+        if ($request->has('deposit_status')) {
+            $query->where('deposit_status', $request->deposit_status);
+        }
+
+        // Filter by auto_renew
+        if ($request->has('auto_renew')) {
+            $query->where('auto_renew', $request->auto_renew === 'true');
         }
 
         // Apply permission-based filtering
@@ -78,7 +110,36 @@ class ContractController extends Controller
             });
         }
 
-        $contracts = $query->latest()->paginate(10);
+        // Include relationships based on request
+        $with = ['room', 'creator', 'updater'];
+
+        if ($request->has('include')) {
+            $includes = explode(',', $request->include);
+            if (in_array('users', $includes) && !in_array('users', $with)) {
+                $with[] = 'users';
+            }
+            if (in_array('room.house', $includes)) {
+                $with[] = 'room.house';
+            }
+        } else {
+            $with[] = 'users'; // Include users by default
+        }
+
+        $query->with($with);
+
+        // Sorting
+        $sortField = $request->get('sort_by', 'created_at');
+        $sortDirection = $request->get('sort_dir', 'desc');
+        $allowedSortFields = ['created_at', 'start_date', 'end_date', 'monthly_price'];
+
+        if (in_array($sortField, $allowedSortFields)) {
+            $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
+        } else {
+            $query->latest();
+        }
+
+        $perPage = $request->get('per_page', 10);
+        $contracts = $query->paginate($perPage);
 
         return response()->json([
             'success' => true,

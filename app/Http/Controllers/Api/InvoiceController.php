@@ -41,6 +41,10 @@ class InvoiceController extends BaseController
         // Admins can see all invoices, so no filter needed
 
         // Apply additional filters
+        if ($request->has('id')) {
+            $query->where('id', $request->id);
+        }
+
         if ($request->has('room_id')) {
             $query->where('room_id', $request->room_id);
         }
@@ -57,6 +61,32 @@ class InvoiceController extends BaseController
             $query->where('year', $request->year);
         }
 
+        // Filter by user IDs
+        if ($request->has('created_by')) {
+            $query->where('created_by', $request->created_by);
+        }
+
+        if ($request->has('updated_by')) {
+            $query->where('updated_by', $request->updated_by);
+        }
+
+        // Date range filters
+        if ($request->has('created_from')) {
+            $query->where('created_at', '>=', $request->created_from);
+        }
+
+        if ($request->has('created_to')) {
+            $query->where('created_at', '<=', $request->created_to);
+        }
+
+        if ($request->has('updated_from')) {
+            $query->where('updated_at', '>=', $request->updated_from);
+        }
+
+        if ($request->has('updated_to')) {
+            $query->where('updated_at', '<=', $request->updated_to);
+        }
+
         // Include relationships
         $with = [];
         if ($request->has('include')) {
@@ -68,10 +98,21 @@ class InvoiceController extends BaseController
             if (in_array('updater', $includes)) $with[] = 'updater';
         }
 
-        $invoices = $query->with($with)
-            ->orderBy('year', 'desc')
-            ->orderBy('month', 'desc')
-            ->paginate(15);
+        // Sorting
+        $sortField = $request->get('sort_by', 'year');
+        $sortDirection = $request->get('sort_dir', 'desc');
+        $allowedSortFields = ['id', 'room_id', 'invoice_type', 'total_amount', 'month', 'year', 'created_at', 'updated_at', 'created_by', 'updated_by'];
+
+        if (in_array($sortField, $allowedSortFields)) {
+            $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
+        } else {
+            $query->orderBy('year', 'desc')
+                ->orderBy('month', 'desc');
+        }
+
+        // Pagination
+        $perPage = $request->get('per_page', 15);
+        $invoices = $query->with($with)->paginate($perPage);
 
         return $this->sendResponse(
             InvoiceResource::collection($invoices)->response()->getData(true),

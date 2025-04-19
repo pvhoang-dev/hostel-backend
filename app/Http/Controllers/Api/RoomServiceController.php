@@ -54,6 +54,37 @@ class RoomServiceController extends BaseController
             $query->where('is_fixed', $request->is_fixed);
         }
 
+        // Price range filters
+        if ($request->has('min_price')) {
+            $query->where('price', '>=', $request->min_price);
+        }
+
+        if ($request->has('max_price')) {
+            $query->where('price', '<=', $request->max_price);
+        }
+
+        // Text search in description
+        if ($request->has('description')) {
+            $query->where('description', 'like', '%' . $request->description . '%');
+        }
+
+        // Date range filters
+        if ($request->has('created_from')) {
+            $query->where('created_at', '>=', $request->created_from);
+        }
+
+        if ($request->has('created_to')) {
+            $query->where('created_at', '<=', $request->created_to);
+        }
+
+        if ($request->has('updated_from')) {
+            $query->where('updated_at', '>=', $request->updated_from);
+        }
+
+        if ($request->has('updated_to')) {
+            $query->where('updated_at', '<=', $request->updated_to);
+        }
+
         // Include relationships
         $with = [];
         if ($request->has('include')) {
@@ -61,9 +92,23 @@ class RoomServiceController extends BaseController
             if (in_array('room', $includes)) $with[] = 'room';
             if (in_array('service', $includes)) $with[] = 'service';
             if (in_array('usages', $includes)) $with[] = 'usages';
+            if (in_array('room.house', $includes)) $with[] = 'room.house';
         }
 
-        $roomServices = $query->with($with)->orderBy('created_at', 'desc')->paginate(15);
+        // Sorting
+        $sortField = $request->get('sort_by', 'created_at');
+        $sortDirection = $request->get('sort_dir', 'desc');
+        $allowedSortFields = ['id', 'room_id', 'service_id', 'price', 'is_fixed', 'status', 'created_at', 'updated_at'];
+
+        if (in_array($sortField, $allowedSortFields)) {
+            $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
+        } else {
+            $query->orderBy('created_at', 'desc');
+        }
+
+        // Pagination
+        $perPage = $request->get('per_page', 15);
+        $roomServices = $query->with($with)->paginate($perPage);
 
         return $this->sendResponse(
             RoomServiceResource::collection($roomServices)->response()->getData(true),

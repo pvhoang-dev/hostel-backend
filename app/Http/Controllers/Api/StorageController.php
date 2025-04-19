@@ -16,13 +16,95 @@ class StorageController extends BaseController
     /**
      * Display a listing of equipment storage.
      *
+     * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $storage = EquipmentStorage::with('equipment')->get();
+        $user = auth()->user();
+        $query = EquipmentStorage::query();
+
+        // Apply role-based filters
+        if ($user->role->code === 'manager') {
+            // Managers can only see storage for houses they manage
+            $managedHouseIds = House::where('manager_id', $user->id)->pluck('id');
+            $query->whereIn('house_id', $managedHouseIds);
+        }
+        // Admins can see all storage items (no filter needed)
+
+        // Apply additional filters
+        if ($request->has('house_id')) {
+            $query->where('house_id', $request->house_id);
+        }
+
+        if ($request->has('equipment_id')) {
+            $query->where('equipment_id', $request->equipment_id);
+        }
+
+        // Quantity range filters
+        if ($request->has('min_quantity')) {
+            $query->where('quantity', '>=', $request->min_quantity);
+        }
+
+        if ($request->has('max_quantity')) {
+            $query->where('quantity', '<=', $request->max_quantity);
+        }
+
+        // Price range filters
+        if ($request->has('min_price')) {
+            $query->where('price', '>=', $request->min_price);
+        }
+
+        if ($request->has('max_price')) {
+            $query->where('price', '<=', $request->max_price);
+        }
+
+        // Search by description
+        if ($request->has('description')) {
+            $query->where('description', 'like', '%' . $request->description . '%');
+        }
+
+        // Date range filters
+        if ($request->has('created_from')) {
+            $query->where('created_at', '>=', $request->created_from);
+        }
+
+        if ($request->has('created_to')) {
+            $query->where('created_at', '<=', $request->created_to);
+        }
+
+        if ($request->has('updated_from')) {
+            $query->where('updated_at', '>=', $request->updated_from);
+        }
+
+        if ($request->has('updated_to')) {
+            $query->where('updated_at', '<=', $request->updated_to);
+        }
+
+        // Include relationships
+        $with = ['equipment'];
+        if ($request->has('include')) {
+            $includes = explode(',', $request->include);
+            if (in_array('house', $includes)) $with[] = 'house';
+        }
+
+        // Sorting
+        $sortField = $request->get('sort_by', 'id');
+        $sortDirection = $request->get('sort_dir', 'asc');
+        $allowedSortFields = ['id', 'house_id', 'equipment_id', 'quantity', 'price', 'created_at', 'updated_at'];
+
+        if (in_array($sortField, $allowedSortFields)) {
+            $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
+        } else {
+            $query->orderBy('id', 'asc');
+        }
+
+        // Pagination
+        $perPage = $request->get('per_page', 15);
+        $storage = $query->with($with)->paginate($perPage);
+
         return $this->sendResponse(
-            EquipmentStorageResource::collection($storage),
+            EquipmentStorageResource::collection($storage)->response()->getData(true),
             'Equipment storage retrieved successfully.'
         );
     }
