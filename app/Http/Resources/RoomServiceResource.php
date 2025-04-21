@@ -19,8 +19,8 @@ class RoomServiceResource extends JsonResource
             'description'    => $this->description,
             'room'           => new RoomResource($this->whenLoaded('room')),
             'service'        => new ServiceResource($this->whenLoaded('service')),
-            'created_at'     => $this->created_at,
-            'updated_at'     => $this->updated_at,
+            'created_at'     => $this->created_at->format('h:m:s d/m/Y'),
+            'updated_at'     => $this->updated_at->format('h:m:s d/m/Y'),
         ];
     }
 }

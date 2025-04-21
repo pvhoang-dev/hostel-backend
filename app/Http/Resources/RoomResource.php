@@ -18,8 +18,8 @@ class RoomResource extends JsonResource
             'status'      => $this->status,
             'base_price'  => $this->base_price,
             'house'       => new HouseResource($this->whenLoaded('house')),
-            'created_at'  => $this->created_at,
-            'updated_at'  => $this->updated_at,
+            'created_at'  => $this->created_at->format('h:m:s d/m/Y'),
+            'updated_at'  => $this->updated_at->format('h:m:s d/m/Y'),
         ];
     }
 }

@@ -19,8 +19,8 @@ class RequestResource extends JsonResource
             'sender'       => new UserResource($this->whenLoaded('sender')),
             'recipient'    => new UserResource($this->whenLoaded('recipient')),
             'updated_by'   => new UserResource($this->whenLoaded('updater')),
-            'created_at'   => $this->created_at,
-            'updated_at'   => $this->updated_at,
+            'created_at'   => $this->created_at->format('h:m:s d/m/Y'),
+            'updated_at'   => $this->updated_at->format('h:m:s d/m/Y'),
         ];
     }
 }

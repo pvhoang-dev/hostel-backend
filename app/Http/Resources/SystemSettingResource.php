@@ -14,10 +14,10 @@ class SystemSettingResource extends JsonResource
             'key'         => $this->key,
             'value'       => $this->value,
             'description' => $this->description,
-            'created_by'  => $this->created_by,
-            'updated_by'  => $this->updated_by,
-            'created_at'  => $this->created_at,
-            'updated_at'  => $this->updated_at,
+            'created_by'  => new UserResource($this->whenLoaded('creator')),
+            'updated_by'  => new UserResource($this->whenLoaded('updater')),
+            'created_at'  => $this->created_at->format('h:m:s d/m/Y'),
+            'updated_at'  => $this->updated_at->format('h:m:s d/m/Y'),
         ];
     }
 }

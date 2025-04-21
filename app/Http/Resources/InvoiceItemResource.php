@@ -17,8 +17,8 @@ class InvoiceItemResource extends JsonResource
             'service_usage_id'   => new ServiceUsageResource($this->whenLoaded('service_usage')),
             'amount'      => $this->amount,
             'description' => $this->description,
-            'created_at'  => $this->created_at,
-            'updated_at'  => $this->updated_at,
+            'created_at'  => $this->created_at->format('h:m:s d/m/Y'),
+            'updated_at'  => $this->updated_at->format('h:m:s d/m/Y'),
         ];
     }
 }

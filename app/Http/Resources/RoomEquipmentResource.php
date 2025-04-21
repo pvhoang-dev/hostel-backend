@@ -19,8 +19,8 @@ class RoomEquipmentResource extends JsonResource
             'description'  => $this->description,
             'room'         => new RoomResource($this->whenLoaded('room')),
             'equipment'    => new EquipmentResource($this->whenLoaded('equipment')),
-            'created_at'   => $this->created_at,
-            'updated_at'   => $this->updated_at,
+            'created_at'   => $this->created_at->format('h:m:s d/m/Y'),
+            'updated_at'   => $this->updated_at->format('h:m:s d/m/Y'),
         ];
     }
 }

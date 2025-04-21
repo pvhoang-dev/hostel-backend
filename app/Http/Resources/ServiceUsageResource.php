@@ -20,8 +20,8 @@ class ServiceUsageResource extends JsonResource
             'price_used'      => $this->price_used,
             'description'     => $this->description,
             'room_service'    => new RoomServiceResource($this->whenLoaded('roomService')),
-            'created_at'      => $this->created_at,
-            'updated_at'      => $this->updated_at,
+            'created_at'      => $this->created_at->format('h:m:s d/m/Y'),
+            'updated_at'      => $this->updated_at->format('h:m:s d/m/Y'),
         ];
     }
 }

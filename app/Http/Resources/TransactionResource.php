@@ -19,8 +19,8 @@ class TransactionResource extends JsonResource
             'transaction_code'  => $this->transaction_code,
             'status'            => $this->status,
             'payment_date'      => $this->payment_date,
-            'created_at'        => $this->created_at,
-            'updated_at'        => $this->updated_at,
+            'created_at'        => $this->created_at->format('h:m:s d/m/Y'),
+            'updated_at'        => $this->updated_at->format('h:m:s d/m/Y'),
         ];
     }
 }

@@ -16,8 +16,8 @@ class RequestCommentResource extends JsonResource
             'request'    => new RequestsResource($this->whenLoaded('request')),
             'user'                   => new UserResource($this->whenLoaded('user')),
             'content'                => $this->content,
-            'created_at'             => $this->created_at,
-            'updated_at'             => $this->updated_at,
+            'created_at'             => $this->created_at->format('h:m:s d/m/Y'),
+            'updated_at'             => $this->updated_at->format('h:m:s d/m/Y'),
         ];
     }
 }

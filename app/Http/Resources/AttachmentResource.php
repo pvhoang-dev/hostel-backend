@@ -18,8 +18,8 @@ class AttachmentResource extends JsonResource
             'file_type'   => $this->file_type,
             'description' => $this->description,
 //            'uploader'    => new UserResource($this->whenLoaded('uploader')),
-            'created_at'  => $this->created_at,
-            'updated_at'  => $this->updated_at,
+            'created_at'  => $this->created_at->format('h:m:s d/m/Y'),
+            'updated_at'  => $this->updated_at->format('h:m:s d/m/Y'),
         ];
     }
 }

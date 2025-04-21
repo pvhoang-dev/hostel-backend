@@ -25,8 +25,8 @@ class InvoiceResource extends JsonResource
             'updated_by'     => new UserResource($this->whenLoaded('updater')),
             'items'          => InvoiceItemResource::collection($this->whenLoaded('items')),
             'transactions'   => TransactionResource::collection($this->whenLoaded('transactions')),
-            'created_at'     => $this->created_at,
-            'updated_at'     => $this->updated_at,
+            'created_at'     => $this->created_at->format('h:m:s d/m/Y'),
+            'updated_at'     => $this->updated_at->format('h:m:s d/m/Y'),
         ];
     }
 }

@@ -125,7 +125,7 @@ class SystemSettingController extends BaseController
      */
     public function show(int $id): JsonResponse
     {
-        $systemSetting = SystemSetting::find($id);
+        $systemSetting = SystemSetting::find($id)->load(['creator', 'updater']);
 
         if (is_null($systemSetting)) {
             return $this->sendError('System setting not found');
