@@ -120,6 +120,10 @@ class HouseController extends BaseController
             return $this->sendError('Validation Error.', $validator->errors(), 422);
         }
 
+        if (empty($input['manager_id'])) {
+            $input['manager_id'] = $currentUser->id;
+        }
+
         $input['created_by'] = $currentUser->id;
         $input['updated_by'] = $currentUser->id;
 
@@ -193,6 +197,10 @@ class HouseController extends BaseController
 
         // Filter request data based on allowed fields
         $input = array_intersect_key($request->all(), array_flip($fieldsAllowed));
+
+        if ($isAdmin && isset($input['manager_id']) && empty($input['manager_id'])) {
+            $input['manager_id'] = $currentUser->id;
+        }
 
         // Add updated_by
         $input['updated_by'] = $currentUser->id;
