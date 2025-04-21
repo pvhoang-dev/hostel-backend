@@ -63,20 +63,14 @@ class NotificationController extends BaseController
             $query->with($with);
         }
 
-        // Sorting
-        $sortField = $request->get('sort_by', 'created_at');
-        $sortDirection = $request->get('sort_dir', 'desc');
-        $allowedSortFields = ['id', 'type', 'created_at', 'is_read'];
-
-        if (in_array($sortField, $allowedSortFields)) {
-            $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
-        } else {
-            $query->latest();
-        }
-
         // Pagination
-        $perPage = $request->get('per_page', 15);
-        $notifications = $query->paginate($perPage);
+        $perPage = $request->get('per_page', 10); // Default to 10 per page
+        $page = $request->get('page', 1);
+
+        // Sort by read status (unread first) and then by created_at desc
+        $notifications = $query->orderBy('is_read', 'asc')
+            ->orderBy('created_at', 'desc')
+            ->paginate($perPage);
 
         return $this->sendResponse(
             NotificationResource::collection($notifications)->response()->getData(true),
