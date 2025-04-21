@@ -73,9 +73,14 @@ class User extends Authenticatable
         return $this->hasMany(House::class, 'manager_id');
     }
 
-    public function maintenanceRequests()
+    public function senderRequests()
     {
-        return $this->hasMany(Request::class, 'user_id');
+        return $this->hasMany(Request::class, 'sender_id');
+    }
+
+    public function recipientRequests()
+    {
+        return $this->hasMany(Request::class, 'recipient_id');
     }
 
     public function notifications()
@@ -94,9 +99,9 @@ class User extends Authenticatable
                 })->first();
 
                 if ($admin) {
-                    $user->housesCreated()->update(['created_by' => $admin->id]);
                     $user->housesManaged()->update(['manager_id' => $admin->id]);
-                    $user->maintenanceRequests()->where('status', 'pending')->update(['user_id' => $admin->id]);
+                    $user->senderRequests()->update(['sender_id' => $admin->id]);
+                    $user->recipientRequests()->update(['recipient_id' => $admin->id]);
                 }
 
                 $user->notifications()->delete();
