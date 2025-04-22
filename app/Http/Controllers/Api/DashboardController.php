@@ -29,7 +29,7 @@ class DashboardController extends BaseController
         // Initialize query builders
         $housesQuery = House::query();
         $roomsQuery = Room::query();
-        $tenantsQuery = User::where('role_id', function($query) {
+        $tenantsQuery = User::where('role_id', function ($query) {
             $query->select('id')->from('roles')->where('code', 'tenant');
         });
         $contractsQuery = Contract::query();
@@ -41,21 +41,21 @@ class DashboardController extends BaseController
 
             $housesQuery->whereIn('id', $managedHouseIds);
             $roomsQuery->whereIn('house_id', $managedHouseIds);
-            $contractsQuery->whereHas('room', function($query) use ($managedHouseIds) {
+            $contractsQuery->whereHas('room', function ($query) use ($managedHouseIds) {
                 $query->whereIn('house_id', $managedHouseIds);
             });
             // Tenants filter is more complex - get tenants with contracts in managed houses
-            $tenantsQuery->whereHas('contracts', function($query) use ($managedHouseIds) {
-                $query->whereHas('room', function($subQuery) use ($managedHouseIds) {
+            $tenantsQuery->whereHas('contracts', function ($query) use ($managedHouseIds) {
+                $query->whereHas('room', function ($subQuery) use ($managedHouseIds) {
                     $subQuery->whereIn('house_id', $managedHouseIds);
                 });
             });
         } elseif (!$isAdmin && !$isManager) {
             // Regular users/tenants can only see their own data
-            $housesQuery->whereHas('rooms.contracts', function($query) use ($user) {
+            $housesQuery->whereHas('rooms.contracts', function ($query) use ($user) {
                 $query->where('user_id', $user->id);
             });
-            $roomsQuery->whereHas('contracts', function($query) use ($user) {
+            $roomsQuery->whereHas('contracts', function ($query) use ($user) {
                 $query->where('user_id', $user->id);
             });
             $tenantsQuery->where('id', $user->id);
