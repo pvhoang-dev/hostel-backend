@@ -24,7 +24,7 @@ class UserController extends BaseController
         $query = User::query();
 
         // Apply role-based access control
-        if ($currentUser->role->code !== 'admin') {
+        if ($currentUser->role?->code !== 'admin') {
             // Non-admins can only see their own profile
             $query->where('id', $currentUser->id);
         }
