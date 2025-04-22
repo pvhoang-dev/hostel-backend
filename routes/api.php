@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ContractController;
+use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\EquipmentController;
 use App\Http\Controllers\Api\HouseController;
 use App\Http\Controllers\Api\HouseSettingController;
@@ -31,6 +32,7 @@ Route::controller(AuthController::class)->group(function () {
 Route::middleware('auth:sanctum')->group(function () {
     // Authentication
     Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/dashboard/stats', [DashboardController::class, 'stats']);
 
     // Roles and Permissions
     Route::resource('roles', RoleController::class);
