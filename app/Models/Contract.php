@@ -39,11 +39,6 @@ class Contract extends Model
         return $this->belongsToMany(User::class, 'contract_users', 'contract_id', 'user_id');
     }
 
-    public function recurringInvoices()
-    {
-        return $this->hasMany(RecurringInvoice::class);
-    }
-
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
@@ -62,9 +57,6 @@ class Contract extends Model
             if (!$contract->isForceDeleting()) {
                 foreach ($contract->contractUsers as $cu) {
                     $cu->delete();
-                }
-                foreach ($contract->recurringInvoices as $ri) {
-                    $ri->delete();
                 }
             }
         });
