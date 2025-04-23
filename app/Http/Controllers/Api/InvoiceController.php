@@ -91,7 +91,7 @@ class InvoiceController extends BaseController
         $with = [];
         if ($request->has('include')) {
             $includes = explode(',', $request->include);
-            if (in_array('room', $includes)) $with[] = 'room';
+            if (in_array('room.house', $includes)) $with[] = 'room.house';
             if (in_array('items', $includes)) $with[] = 'items';
             if (in_array('transactions', $includes)) $with[] = 'transactions';
             if (in_array('creator', $includes)) $with[] = 'creator';
