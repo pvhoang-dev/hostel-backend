@@ -188,14 +188,18 @@ class InvoiceController extends BaseController
 
                     // Check if service usage belongs to a room service in the specified room
                     if ($serviceUsage->roomService->room_id !== $room->id) {
-                        return $this->sendError('Validation Error.',
-                            ['items' => 'Service usage must belong to the specified room']);
+                        return $this->sendError(
+                            'Validation Error.',
+                            ['items' => 'Service usage must belong to the specified room']
+                        );
                     }
 
                     // Check if service usage is for the specified month/year
                     if ($serviceUsage->month != $input['month'] || $serviceUsage->year != $input['year']) {
-                        return $this->sendError('Validation Error.',
-                            ['items' => 'Service usage month/year must match invoice month/year']);
+                        return $this->sendError(
+                            'Validation Error.',
+                            ['items' => 'Service usage month/year must match invoice month/year']
+                        );
                     }
                 }
             }
@@ -309,14 +313,18 @@ class InvoiceController extends BaseController
 
                     // Check if service usage belongs to a room service in the specified room
                     if ($serviceUsage->roomService->room_id !== $invoice->room_id) {
-                        return $this->sendError('Validation Error.',
-                            ['items' => 'Service usage must belong to the same room as the invoice']);
+                        return $this->sendError(
+                            'Validation Error.',
+                            ['items' => 'Service usage must belong to the same room as the invoice']
+                        );
                     }
 
                     // Check if service usage is for the specified month/year
                     if ($serviceUsage->month != $invoice->month || $serviceUsage->year != $invoice->year) {
-                        return $this->sendError('Validation Error.',
-                            ['items' => 'Service usage month/year must match invoice month/year']);
+                        return $this->sendError(
+                            'Validation Error.',
+                            ['items' => 'Service usage month/year must match invoice month/year']
+                        );
                     }
                 }
             }
