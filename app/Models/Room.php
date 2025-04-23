@@ -40,6 +40,18 @@ class Room extends Model
         return $this->hasMany(RoomService::class);
     }
 
+    public function contracts()
+    {
+        return $this->hasMany(Contract::class);
+    }
+
+    public function currentContract()
+    {
+        return $this->hasOne(Contract::class)
+            ->where('status', 'active')
+            ->latest('start_date');
+    }
+
     protected static function boot()
     {
         parent::boot();

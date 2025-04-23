@@ -87,6 +87,14 @@ class InvoiceController extends BaseController
             $query->where('updated_at', '<=', $request->updated_to);
         }
 
+        if ($request->has('min_amount')) {
+            $query->where('total_amount', '>=', $request->min_amount);
+        }
+
+        if ($request->has('max_amount')) {
+            $query->where('total_amount', '<=', $request->max_amount);
+        }
+
         // Include relationships
         $with = [];
         if ($request->has('include')) {

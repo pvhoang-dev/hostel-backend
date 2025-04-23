@@ -87,6 +87,7 @@ class RoomController extends BaseController
             $includes = explode(',', $request->include);
             if (in_array('services', $includes)) $with[] = 'services';
             if (in_array('contracts', $includes)) $with[] = 'contracts';
+            if (in_array('currentContract', $includes)) $with[] = 'currentContract';
             if (in_array('creator', $includes)) $with[] = 'creator';
             if (in_array('updater', $includes)) $with[] = 'updater';
         }

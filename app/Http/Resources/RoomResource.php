@@ -18,6 +18,7 @@ class RoomResource extends JsonResource
             'status'      => $this->status,
             'base_price'  => $this->base_price,
             'house'       => new HouseResource($this->whenLoaded('house')),
+            'currentContract'   => new ContractResource($this->whenLoaded('currentContract')),
             'created_at'  => $this->created_at->format('h:m:s d/m/Y'),
             'updated_at'  => $this->updated_at->format('h:m:s d/m/Y'),
         ];
