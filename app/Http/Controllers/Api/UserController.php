@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\BaseController as BaseController;
 use App\Http\Resources\UserResource;
+use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,8 +25,31 @@ class UserController extends BaseController
         $query = User::query();
 
         // Apply role-based access control
-        if ($currentUser->role?->code !== 'admin') {
-            // Non-admins can only see their own profile
+        if ($currentUser->role?->code === 'admin') {
+            // Admin can see all users, no filter needed
+        } elseif ($currentUser->role?->code === 'manager') {
+            // Manager can see their own profile and tenants from houses they manage
+
+            // Get all houses managed by this manager
+            $managedHouseIds = $currentUser->housesManaged()->pluck('id')->toArray();
+
+            $query->where(function ($q) use ($currentUser, $managedHouseIds) {
+                // Manager can see their own profile
+                $q->where('id', $currentUser->id)
+                    // Or tenants from contracts in rooms of houses they manage
+                    ->orWhere(function ($q2) use ($managedHouseIds) {
+                        $q2->whereHas('role', function ($roleQuery) {
+                            $roleQuery->where('code', 'tenant');
+                        })
+                            ->whereHas('contracts', function ($contractQuery) use ($managedHouseIds) {
+                                $contractQuery->whereHas('room', function ($roomQuery) use ($managedHouseIds) {
+                                    $roomQuery->whereIn('house_id', $managedHouseIds);
+                                });
+                            });
+                    });
+            });
+        } else {
+            // Other users (tenants) can only see their own profile
             $query->where('id', $currentUser->id);
         }
 
@@ -87,9 +111,8 @@ class UserController extends BaseController
         $with = ['role'];
         if ($request->has('include')) {
             $includes = explode(',', $request->include);
-            // Add additional relationships if needed
             if (in_array('contracts', $includes)) $with[] = 'contracts';
-            if (in_array('managedHouses', $includes)) $with[] = 'managedHouses';
+            if (in_array('managedHouses', $includes)) $with[] = 'housesManaged';
         }
 
         // Sorting
@@ -121,30 +144,49 @@ class UserController extends BaseController
      */
     public function store(Request $request): JsonResponse
     {
+        $currentUser = auth()->user();
         $input = $request->all();
+
+        // Tenants cannot create users
+        if ($currentUser->role?->code === 'tenant') {
+            return $this->sendError('Người thuê không có quyền tạo người dùng mới.');
+        }
+
+        // Managers can only create tenant users
+        if ($currentUser->role?->code === 'manager') {
+            $tenantRoleId = Role::where('code', 'tenant')->first()?->id;
+
+            // If role_id is not specified or is not tenant
+            if (!isset($input['role_id']) || $input['role_id'] != $tenantRoleId) {
+                return $this->sendError('Quản lý chỉ có thể tạo người dùng với vai trò người thuê.');
+            }
+        }
 
         $validator = Validator::make($input, [
             'username'                 => 'required|string|unique:users,username',
             'name'                     => 'required|string',
-            'email'                    => 'nullable|email|unique:users,email',
+            'email'                    => 'required|email|unique:users,email',
             'password'                 => 'required|string|min:6',
-            'phone_number'             => 'nullable|string',
+            'phone_number'             => 'required|string|regex:/^0\d{9}$/',
             'hometown'                 => 'nullable|string',
             'identity_card'            => 'nullable|string',
             'vehicle_plate'            => 'nullable|string',
-            'status' => 'sometimes|string',
+            'status'                   => 'sometimes|string',
             'role_id'                  => 'nullable|exists:roles,id',
             'avatar_url'               => 'nullable|string',
             'notification_preferences' => 'nullable',
         ], [
-            'username.required' => 'Username is required.',
-            'username.unique'   => 'Username already exists.',
-            'name.required'     => 'Name is required.',
-            'email.email'       => 'Email is invalid.',
-            'email.unique'      => 'Email already exists.',
-            'role_id.exists'    => 'Selected role does not exist.',
-            'password.required' => 'Password is required.',
-            'password.min'      => 'Password must be at least 6 characters.',
+            'username.required' => 'Bắt buộc điền username.',
+            'username.unique'   => 'Username đã tồn tại.',
+            'name.required'     => 'Bắt buộc điền tên.',
+            'email.required'    => 'Bắt buộc điền email.',
+            'email.email'       => 'Email không đúng đinh dạng.',
+            'email.unique'      => 'Email đã tồn tại.',
+            'phone_number.required' => 'Bắt buộc điền số điện thoại.',
+            'phone_number.regex' => 'Nhập đúng định dạng số điện thoại.',
+            'role_id.exists'    => 'Không tồn tại role đó.',
+            'password.required' => 'Bắt buộc điền mật khẩu.',
+            'password.min'      => 'Mật khẩu phải có ít nhất 6 kí tự.',
         ]);
 
         if ($validator->fails()) {
@@ -166,10 +208,43 @@ class UserController extends BaseController
      */
     public function show(string $id): JsonResponse
     {
+        $currentUser = auth()->user();
         $user = User::with('role')->find($id);
 
         if (is_null($user)) {
             return $this->sendError('User not found.');
+        }
+
+        // Apply role-based access control
+        if ($currentUser->role?->code === 'admin') {
+            // Admin can see any user
+        } elseif ($currentUser->role?->code === 'manager') {
+            // Manager can see themselves
+            if ($currentUser->id == $user->id) {
+                // Allow access
+            }
+            // Or manager can see tenants from houses they manage
+            elseif ($user->role?->code === 'tenant') {
+                $managedHouseIds = $currentUser->housesManaged()->pluck('id')->toArray();
+
+                // Check if user is a tenant in a managed house
+                $canView = $user->contracts()
+                    ->whereHas('room', function ($roomQuery) use ($managedHouseIds) {
+                        $roomQuery->whereIn('house_id', $managedHouseIds);
+                    })
+                    ->exists();
+
+                if (!$canView) {
+                    return $this->sendError('Bạn không có quyền xem thông tin người dùng này.', []);
+                }
+            } else {
+                return $this->sendError('Bạn không có quyền xem thông tin người dùng này.', []);
+            }
+        } else {
+            // Tenants can only see their own profile
+            if ($currentUser->id != $user->id) {
+                return $this->sendError('Bạn chỉ có thể xem thông tin tài khoản của mình.', []);
+            }
         }
 
         return $this->sendResponse(new UserResource($user), 'User retrieved successfully.');
@@ -185,6 +260,7 @@ class UserController extends BaseController
     public function update(Request $request, string $id): JsonResponse
     {
         $user = User::find($id);
+        $currentUser = auth()->user();
 
         if (is_null($user)) {
             return $this->sendError('User not found.');
@@ -192,11 +268,53 @@ class UserController extends BaseController
 
         $input = $request->all();
 
+        // Prevent users from changing their own role
+        if ($currentUser->id == $user->id && isset($input['role_id']) && $input['role_id'] != $user->role_id) {
+            return $this->sendError('Bạn không thể thay đổi vai trò của chính mình.');
+        }
+
+        // Prevent tenants from updating themselves
+        if ($currentUser->id == $user->id && $currentUser->role?->code === 'tenant') {
+            return $this->sendError('Người thuê không thể tự cập nhật thông tin của mình.');
+        }
+
+        // Check if attempting to change role of an admin user
+        if ($user->role?->code === 'admin' && isset($input['role_id']) && $input['role_id'] != $user->role_id) {
+            return $this->sendError('Không thể thay đổi vai trò của người dùng admin.');
+        }
+
+        // Check if attempting to change manager to tenant while they manage houses
+        if (
+            $user->role?->code === 'manager' &&
+            isset($input['role_id']) &&
+            $input['role_id'] != $user->role_id
+        ) {
+
+            // Get the role code of the new role_id
+            $newRoleCode = \App\Models\Role::find($input['role_id'])?->code;
+
+            // If changing to tenant and manager has houses
+            if ($newRoleCode === 'tenant' && $user->housesManaged()->count() > 0) {
+                return $this->sendError('Không thể thay đổi vai trò của quản lý thành người thuê khi họ đang quản lý nhà.');
+            }
+        }
+
+        // Check if attempting to change status of a manager who manages houses from active to inactive
+        if (
+            $user->role?->code === 'manager' &&
+            isset($input['status']) &&
+            $input['status'] === 'inactive' &&
+            $user->status === 'active' &&
+            $user->housesManaged()->count() > 0
+        ) {
+            return $this->sendError('Không thể thay đổi trạng thái của quản lý thành inactive khi họ đang quản lý nhà.');
+        }
+
         $validator = Validator::make($input, [
-            'username'                 => 'sometimes|required|string|unique:users,username,'.$user->id,
+            'username'                 => 'sometimes|required|string|unique:users,username,' . $user->id,
             'name'                     => 'sometimes|required|string',
-            'email'                    => 'sometimes|nullable|email|unique:users,email,'.$user->id,
-            'phone_number'             => 'sometimes|nullable|string',
+            'email'                    => 'sometimes|required|email|unique:users,email,' . $user->id,
+            'phone_number'             => 'sometimes|required|string|regex:/^0\d{9}$/',
             'hometown'                 => 'sometimes|nullable|string',
             'identity_card'            => 'sometimes|nullable|string',
             'vehicle_plate'            => 'sometimes|nullable|string',
@@ -205,12 +323,15 @@ class UserController extends BaseController
             'avatar_url'               => 'sometimes|nullable|string',
             'notification_preferences' => 'sometimes|nullable',
         ], [
-            'username.required' => 'Username is required when provided.',
-            'username.unique'   => 'Username already exists.',
-            'name.required'     => 'Name is required when provided.',
-            'email.email'       => 'Email is invalid.',
-            'email.unique'      => 'Email already exists.',
-            'role_id.exists'    => 'Selected role does not exist.',
+            'username.required' => 'Bắt buộc điền username.',
+            'username.unique'   => 'Username đã tồn tại.',
+            'name.required'     => 'Bắt buộc điền tên.',
+            'email.required'    => 'Bắt buộc điền email.',
+            'email.email'       => 'Email không đúng đinh dạng.',
+            'email.unique'      => 'Email đã tồn tại.',
+            'phone_number.required' => 'Bắt buộc điền số điện thoại.',
+            'phone_number.regex' => 'Nhập đúng định dạng số điện thoại.',
+            'role_id.exists'    => 'Không tồn tại role đó.',
         ]);
 
         if ($validator->fails()) {
@@ -244,15 +365,44 @@ class UserController extends BaseController
      */
     public function destroy(string $id): JsonResponse
     {
+        $currentUser = auth()->user();
         $user = User::find($id);
 
         if (is_null($user)) {
-            return $this->sendError('User not found.');
+            return $this->sendError('Không tìm thấy user.');
+        }
+
+        // Prevent users from deleting themselves
+        if ($currentUser->id == $user->id) {
+            return $this->sendError('Bạn không thể xóa tài khoản của mình.', []);
+        }
+
+        // Apply role-based access control
+        if ($currentUser->role?->code === 'admin') {
+            // Admin can delete any user except themselves (already checked above)
+        } elseif ($currentUser->role?->code === 'manager') {
+            // Manager can only delete tenants from houses they manage
+            $managedHouseIds = $currentUser->housesManaged()->pluck('id')->toArray();
+
+            // Check if user is a tenant and belongs to a managed house
+            $canDelete = $user->role?->code === 'tenant' &&
+                $user->contracts()
+                ->whereHas('room', function ($roomQuery) use ($managedHouseIds) {
+                    $roomQuery->whereIn('house_id', $managedHouseIds);
+                })
+                ->exists();
+
+            if (!$canDelete) {
+                return $this->sendError('Bạn không có quyền xóa người dùng này.', []);
+            }
+        } else {
+            // Tenants cannot delete any users
+            return $this->sendError('Bạn không có quyền xóa người dùng này.', []);
         }
 
         $user->delete();
 
-        return $this->sendResponse([], 'User deleted successfully.');
+        return $this->sendResponse([], 'Xóa người dùng thành công.');
     }
 
     /**

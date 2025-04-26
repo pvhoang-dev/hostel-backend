@@ -88,6 +88,11 @@ class User extends Authenticatable
         return $this->hasMany(Notification::class, 'user_id');
     }
 
+    public function contracts()
+    {
+        return $this->belongsToMany(Contract::class, 'contract_users', 'user_id', 'contract_id');
+    }
+
     protected static function boot()
     {
         parent::boot();
