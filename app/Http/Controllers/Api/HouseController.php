@@ -7,6 +7,7 @@ use App\Http\Resources\HouseResource;
 use App\Models\House;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 
 class HouseController extends BaseController
@@ -19,7 +20,22 @@ class HouseController extends BaseController
      */
     public function index(Request $request): JsonResponse
     {
+        $user = Auth::user();
+        if (!$user) {
+            return $this->sendError('Unauthorized', ['error' => 'Bạn cần đăng nhập để thực hiện thao tác này'], 401);
+        }
+
+        // Check if user is admin or manager
+        if (!in_array($user->role->code, ['admin', 'manager'])) {
+            return $this->sendError('Forbidden', ['error' => 'Chỉ quản trị viên hoặc quản lý mới có quyền xem danh sách nhà trọ'], 403);
+        }
+
         $query = House::query();
+
+        // If manager, only show houses they manage
+        if ($user->role->code === 'manager') {
+            $query->where('manager_id', $user->id);
+        }
 
         // Filter by name
         if ($request->has('name')) {
@@ -31,8 +47,8 @@ class HouseController extends BaseController
             $query->where('status', $request->status);
         }
 
-        // Filter by manager_id
-        if ($request->has('manager_id')) {
+        // Filter by manager_id (admin only)
+        if ($user->role->code === 'admin' && $request->has('manager_id')) {
             $query->where('manager_id', $request->manager_id);
         }
 
@@ -102,9 +118,14 @@ class HouseController extends BaseController
      */
     public function store(Request $request): JsonResponse
     {
-        $currentUser = auth()->user();
-        if (!$currentUser || $currentUser->role->code !== 'admin') {
-            return $this->sendError('Unauthorized. Only admins can create houses.', [], 403);
+        $currentUser = Auth::user();
+        if (!$currentUser) {
+            return $this->sendError('Unauthorized', ['error' => 'Bạn cần đăng nhập để thực hiện thao tác này'], 401);
+        }
+
+        // Already checks for admin only
+        if ($currentUser->role->code !== 'admin') {
+            return $this->sendError('Forbidden', ['error' => 'Chỉ quản trị viên mới có thể tạo nhà trọ mới'], 403);
         }
 
         $input = $request->all();
@@ -112,7 +133,7 @@ class HouseController extends BaseController
             'name' => 'required|string|max:100',
             'address' => 'required|string|max:255',
             'manager_id' => 'nullable|exists:users,id',
-            'status' => 'sometimes|string|max:10',
+            'status' => 'sometimes|string',
             'description' => 'nullable|string',
         ]);
 
@@ -130,7 +151,7 @@ class HouseController extends BaseController
         $house = House::create($input);
         $house->load(['manager', 'updater']);
 
-        return $this->sendResponse(new HouseResource($house), 'House created successfully.');
+        return $this->sendResponse(new HouseResource($house), 'Nhà trọ được tạo thành công.');
     }
 
     /**
@@ -141,13 +162,28 @@ class HouseController extends BaseController
      */
     public function show(string $id): JsonResponse
     {
+        $currentUser = Auth::user();
+        if (!$currentUser) {
+            return $this->sendError('Unauthorized', ['error' => 'Bạn cần đăng nhập để thực hiện thao tác này'], 401);
+        }
+
+        // Check if user is admin or manager
+        if (!in_array($currentUser->role->code, ['admin', 'manager'])) {
+            return $this->sendError('Forbidden', ['error' => 'Chỉ quản trị viên hoặc quản lý mới có quyền xem thông tin nhà trọ'], 403);
+        }
+
         $house = House::with(['manager', 'updater'])->find($id);
 
         if (is_null($house)) {
-            return $this->sendError('House not found.');
+            return $this->sendError('Không tìm thấy nhà trọ.');
         }
 
-        return $this->sendResponse(new HouseResource($house), 'House retrieved successfully.');
+        // If manager, check if they manage this house
+        if ($currentUser->role->code === 'manager' && $house->manager_id !== $currentUser->id) {
+            return $this->sendError('Forbidden', ['error' => 'Bạn không có quyền xem thông tin nhà trọ này'], 403);
+        }
+
+        return $this->sendResponse(new HouseResource($house), 'Lấy thông tin nhà trọ thành công.');
     }
 
     /**
@@ -159,35 +195,40 @@ class HouseController extends BaseController
      */
     public function update(Request $request, string $id): JsonResponse
     {
+        $currentUser = Auth::user();
+        if (!$currentUser) {
+            return $this->sendError('Unauthorized', ['error' => 'Bạn cần đăng nhập để thực hiện thao tác này'], 401);
+        }
+
+        // Check if user is admin or manager
+        if (!in_array($currentUser->role->code, ['admin', 'manager'])) {
+            return $this->sendError('Forbidden', ['error' => 'Chỉ quản trị viên hoặc quản lý mới có quyền cập nhật nhà trọ'], 403);
+        }
+
         $house = House::find($id);
 
         if (is_null($house)) {
-            return $this->sendError('House not found.');
+            return $this->sendError('Không tìm thấy nhà trọ.');
         }
 
-        $currentUser = auth()->user();
-        if (!$currentUser) {
-            return $this->sendError('Unauthorized.', [], 401);
-        }
-
-        // Only admins or the house manager can update the house
+        // Check permissions
         $isAdmin = $currentUser->role->code === 'admin';
-        $isManager = $house->manager_id === $currentUser->id;
+        $isManager = $currentUser->role->code === 'manager' && $house->manager_id === $currentUser->id;
 
         if (!$isAdmin && !$isManager) {
-            return $this->sendError('Unauthorized. Only admins or house managers can update houses.', [], 403);
+            return $this->sendError('Forbidden', ['error' => 'Bạn không có quyền cập nhật nhà trọ này'], 403);
         }
 
-        // If not admin, restrict fields that can be updated
-        $fieldsAllowed = $isAdmin ?
-            ['name', 'address', 'manager_id', 'status', 'description'] :
-            ['name', 'address', 'status', 'description'];
+        // Determine which fields can be updated based on role
+        $fieldsAllowed = $isAdmin
+            ? ['name', 'address', 'manager_id', 'status', 'description']
+            : ['name', 'address', 'status', 'description'];
 
         $validator = Validator::make($request->all(), [
             'name' => 'sometimes|required|string|max:100',
             'address' => 'sometimes|required|string|max:255',
-            'manager_id' => 'sometimes|nullable|exists:users,id',
-            'status' => 'sometimes|string|max:10',
+            'manager_id' => $isAdmin ? 'sometimes|nullable|exists:users,id' : '',
+            'status' => 'sometimes|string',
             'description' => 'sometimes|nullable|string',
         ]);
 
@@ -208,7 +249,7 @@ class HouseController extends BaseController
         $house->update($input);
         $house->load(['manager', 'updater']);
 
-        return $this->sendResponse(new HouseResource($house), 'House updated successfully.');
+        return $this->sendResponse(new HouseResource($house), 'Cập nhật nhà trọ thành công.');
     }
 
     /**
@@ -219,19 +260,24 @@ class HouseController extends BaseController
      */
     public function destroy(string $id): JsonResponse
     {
+        $currentUser = Auth::user();
+        if (!$currentUser) {
+            return $this->sendError('Unauthorized', ['error' => 'Bạn cần đăng nhập để thực hiện thao tác này'], 401);
+        }
+
+        // Already checks for admin only
+        if ($currentUser->role->code !== 'admin') {
+            return $this->sendError('Forbidden', ['error' => 'Chỉ quản trị viên mới có thể xóa nhà trọ'], 403);
+        }
+
         $house = House::find($id);
 
         if (is_null($house)) {
-            return $this->sendError('House not found.');
-        }
-
-        $currentUser = auth()->user();
-        if (!$currentUser || $currentUser->role->code !== 'admin') {
-            return $this->sendError('Unauthorized. Only admins can delete houses.', [], 403);
+            return $this->sendError('Không tìm thấy nhà trọ.');
         }
 
         $house->delete();
 
-        return $this->sendResponse([], 'House deleted successfully.');
+        return $this->sendResponse([], 'Xóa nhà trọ thành công.');
     }
 }

@@ -107,6 +107,13 @@ class UserController extends BaseController
             $query->where('updated_at', '<=', $request->updated_to);
         }
 
+        if ($request->has('role')) {
+            $roleCodes = explode(',', $request->role);
+            $query->whereHas('role', function ($query) use ($roleCodes) {
+                $query->whereIn('code', $roleCodes);
+            });
+        }
+
         // Include relationships
         $with = ['role'];
         if ($request->has('include')) {
