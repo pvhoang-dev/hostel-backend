@@ -105,17 +105,24 @@ class ServiceController extends BaseController
             'default_price' => 'required|integer',
             'unit' => 'required|string|max:20',
             'is_metered' => 'sometimes|boolean'
+        ], [
+            'name.required' => 'Tên dịch vụ là bắt buộc.',
+            'name.unique' => 'Tên dịch vụ đã tồn tại.',
+            'default_price.required' => 'Giá mặc định là bắt buộc.',
+            'default_price.integer' => 'Giá mặc định phải là một số nguyên.',
+            'unit.required' => 'Đơn vị là bắt buộc.',
+            'unit.max' => 'Đơn vị không được vượt quá 20 ký tự.'
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors(), 422);
+            return $this->sendError('Tạo dịch vụ không thành công.', $validator->errors(), 422);
         }
 
         $service = Service::create($request->all());
 
         return $this->sendResponse(
             new ServiceResource($service),
-            'Service created successfully'
+            'Dịch vụ được tạo thành công.'
         );
     }
 
@@ -130,7 +137,7 @@ class ServiceController extends BaseController
         $service = Service::find($id);
 
         if (is_null($service)) {
-            return $this->sendError('Service not found');
+            return $this->sendError('Không tìm thấy dịch vụ.');
         }
 
         return $this->sendResponse(
@@ -155,10 +162,17 @@ class ServiceController extends BaseController
             'default_price' => 'sometimes|required|integer',
             'unit' => 'sometimes|required|string|max:20',
             'is_metered' => 'sometimes|boolean'
+        ], [
+            'name.required' => 'Tên dịch vụ là bắt buộc.',
+            'name.unique' => 'Tên dịch vụ đã tồn tại.',
+            'default_price.required' => 'Giá mặc định là bắt buộc.',
+            'default_price.integer' => 'Giá mặc định phải là một số nguyên.',
+            'unit.required' => 'Đơn vị là bắt buộc.',
+            'unit.max' => 'Đơn vị không được vượt quá 20 ký tự.'
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors(), 422);
+            return $this->sendError('Cập nhật dịch vụ không thành công.', $validator->errors(), 422);
         }
 
         $service->fill($request->only([
@@ -172,7 +186,7 @@ class ServiceController extends BaseController
 
         return $this->sendResponse(
             new ServiceResource($service),
-            'Service updated successfully.'
+            'Dịch vụ cập nhật thành công.'
         );
     }
 
@@ -187,13 +201,13 @@ class ServiceController extends BaseController
         $service = Service::find($id);
 
         if (is_null($service)) {
-            return $this->sendError('Service not found');
+            return $this->sendError('Không tìm thấy dịch vụ.');
         }
 
         // Check if there are related room service records
         if ($service->roomServices()->count() > 0) {
             return $this->sendError(
-                'Cannot delete this service as it has associated room records',
+                'Không thể xóa dịch vụ này vì nó đang được sử dụng trong các phòng.',
                 [],
                 422
             );
@@ -201,6 +215,6 @@ class ServiceController extends BaseController
 
         $service->delete();
 
-        return $this->sendResponse([], 'Service deleted successfully');
+        return $this->sendResponse([], 'Dịch vụ đã được xóa thành công.');
     }
 }

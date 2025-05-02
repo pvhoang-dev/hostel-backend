@@ -7,6 +7,7 @@ use App\Http\Resources\RoleResource;
 use App\Models\Role;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 
 /**
@@ -24,6 +25,13 @@ class RoleController extends BaseController
      */
     public function index(Request $request): JsonResponse
     {
+        $user = Auth::user();
+
+        // Only admin can access roles
+        if (!$user || $user->role->code !== 'admin') {
+            return $this->sendError('Unauthorized', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
+        }
+
         $query = Role::query();
 
         // Apply filters
@@ -84,17 +92,26 @@ class RoleController extends BaseController
      * Store a newly created resource in storage.
      *
      * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
+     * @return JsonResponse
      */
     public function store(Request $request): JsonResponse
     {
+        $user = Auth::user();
+
+        // Only admin can create roles
+        if (!$user || $user->role->code !== 'admin') {
+            return $this->sendError('Unauthorized', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
+        }
+
         $input = $request->all();
 
         $validator = Validator::make($input, [
             'code' => 'required|unique:roles,code',
             'name' => 'required'
         ], [
-            'code.unique'   => 'Code already exists.',
+            'code.required' => 'Mã code là bắt buộc.',
+            'code.unique'   => 'Mã code đã tồn tại.',
+            'name.required' => 'Tên vai trò là bắt buộc.',
         ]);
 
         if ($validator->fails()) {
@@ -105,7 +122,7 @@ class RoleController extends BaseController
 
         return $this->sendResponse(
             new RoleResource($role),
-            'Role created successfully.'
+            'Vai trò đã được tạo thành công.'
         );
     }
 
@@ -113,14 +130,21 @@ class RoleController extends BaseController
      * Display the specified resource.
      *
      * @param  int  $id
-     * @return \Illuminate\Http\Response
+     * @return JsonResponse
      */
     public function show(int $id): JsonResponse
     {
+        $user = Auth::user();
+
+        // Only admin can view role details
+        if (!$user || $user->role->code !== 'admin') {
+            return $this->sendError('Unauthorized', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
+        }
+
         $role = Role::find($id);
 
         if (is_null($role)) {
-            return $this->sendError('Role not found.');
+            return $this->sendError('Vai trò không tồn tại.');
         }
 
         return $this->sendResponse(
@@ -134,21 +158,30 @@ class RoleController extends BaseController
      *
      * @param  \Illuminate\Http\Request  $request
      * @param  \App\Models\Role  $role
-     * @return \Illuminate\Http\Response
+     * @return JsonResponse
      */
     public function update(Request $request, Role $role): JsonResponse
     {
+        $user = Auth::user();
+
+        // Only admin can update roles
+        if (!$user || $user->role->code !== 'admin') {
+            return $this->sendError('Unauthorized', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
+        }
+
         $input = $request->all();
 
         $validator = Validator::make($input, [
             'code' => 'sometimes|required|unique:roles,code,' . $role->id,
             'name' => 'sometimes|required'
         ], [
-            'code.unique'   => 'Code already exists.',
+            'code.required' => 'Mã code là bắt buộc.',
+            'code.unique'   => 'Mã code đã tồn tại.',
+            'name.required' => 'Tên vai trò là bắt buộc.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
+            return $this->sendError('Lỗi khi cập nhật vai trò.', $validator->errors());
         }
 
         if (isset($input['code'])) {
@@ -162,21 +195,27 @@ class RoleController extends BaseController
 
         return $this->sendResponse(
             new RoleResource($role),
-            'Role updated successfully.'
+            'Vai trò đã được cập nhật thành công.'
         );
     }
-
 
     /**
      * Remove the specified resource from storage.
      *
      * @param  \App\Models\Role  $role
-     * @return \Illuminate\Http\Response
+     * @return JsonResponse
      */
     public function destroy(Role $role): JsonResponse
     {
+        $user = Auth::user();
+
+        // Only admin can delete roles
+        if (!$user || $user->role->code !== 'admin') {
+            return $this->sendError('Unauthorized', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
+        }
+
         $role->delete();
 
-        return $this->sendResponse([], 'Role deleted successfully.');
+        return $this->sendResponse([], 'Vai trò đã được xóa thành công.');
     }
 }
