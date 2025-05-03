@@ -108,8 +108,15 @@ class HouseSettingController extends BaseController
     public function store(Request $request): JsonResponse
     {
         $currentUser = auth()->user();
-        if (!$currentUser || $currentUser->role->code !== 'admin') {
-            return $this->sendError('Unauthorized. Only admins can create house settings.', [], 403);
+        if (!$currentUser) {
+            return $this->sendError('Không có quyền truy cập.', [], 401);
+        }
+
+        $isAdmin = $currentUser->role->code === 'admin';
+        $isManager = $currentUser->role->code === 'manager';
+
+        if (!$isAdmin && !$isManager) {
+            return $this->sendError('Chỉ quản trị viên và quản lý mới có thể tạo nội quy nhà.', [], 403);
         }
 
         $validator = Validator::make($request->all(), [
@@ -117,10 +124,24 @@ class HouseSettingController extends BaseController
             'key' => 'required|string|max:50|unique:house_settings,key',
             'value' => 'required|string',
             'description' => 'nullable|string',
+        ], [
+            'house_id.required' => 'Mã nhà là bắt buộc.',
+            'house_id.exists' => 'Mã nhà không tồn tại.',
+            'key.required' => 'Số thứ tự là bắt buộc.',
+            'key.unique' => 'Số thứ tự đã tồn tại.',
+            'value.required' => 'Nội quy là bắt buộc.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors(), 422);
+            return $this->sendError('Lỗi xác thực dữ liệu.', $validator->errors(), 422);
+        }
+
+        // If manager, check if they manage this house
+        if ($isManager) {
+            $house = House::find($request->house_id);
+            if (!$house || $house->manager_id !== $currentUser->id) {
+                return $this->sendError('Bạn không có quyền tạo nội quy cho nhà này.', [], 403);
+            }
         }
 
         $input = $request->all();
@@ -131,7 +152,7 @@ class HouseSettingController extends BaseController
 
         return $this->sendResponse(
             new HouseSettingResource($setting),
-            'House setting created successfully.'
+            'Nội quy nhà được tạo thành công.'
         );
     }
 
@@ -146,12 +167,14 @@ class HouseSettingController extends BaseController
         $setting = HouseSetting::find($id);
 
         if (is_null($setting)) {
-            return $this->sendError('House setting not found.');
+            return $this->sendError('Nội quy nhà không tồn tại.');
         }
+
+        $setting->load(['house.manager']);
 
         return $this->sendResponse(
             new HouseSettingResource($setting),
-            'House setting retrieved successfully.'
+            'Lấy thông tin nội quy nhà thành công.'
         );
     }
 
@@ -167,12 +190,12 @@ class HouseSettingController extends BaseController
         $setting = HouseSetting::find($id);
 
         if (is_null($setting)) {
-            return $this->sendError('House setting not found.');
+            return $this->sendError('Nội quy nhà không tồn tại.');
         }
 
         $currentUser = auth()->user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized.', [], 401);
+            return $this->sendError('Không có quyền truy cập.', [], 401);
         }
 
         $house = $setting->house;
@@ -180,17 +203,23 @@ class HouseSettingController extends BaseController
         $isManager = $house && $house->manager_id === $currentUser->id;
 
         if (!$isAdmin && !$isManager) {
-            return $this->sendError('Unauthorized. Only admins or house managers can update settings.', [], 403);
+            return $this->sendError('Chỉ quản trị viên hoặc quản lý nhà mới có thể cập nhật nội quy.', [], 403);
         }
 
         $validator = Validator::make($request->all(), [
             'key' => 'sometimes|required|string|max:50|unique:house_settings,key,' . $setting->id,
             'value' => 'sometimes|required|string',
             'description' => 'nullable|string',
+        ], [
+            'key.required' => 'Số thứ tự là bắt buộc.',
+            'key.unique' => 'Số thứ tự đã tồn tại.',
+            'value.required' => 'Nội quy là bắt buộc.',
+            'house_id.required' => 'Mã nhà là bắt buộc.',
+            'house_id.exists' => 'Mã nhà không tồn tại.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors(), 422);
+            return $this->sendError('Lỗi xác thực dữ liệu.', $validator->errors(), 422);
         }
 
         $input = $request->all();
@@ -200,7 +229,7 @@ class HouseSettingController extends BaseController
 
         return $this->sendResponse(
             new HouseSettingResource($setting),
-            'House setting updated successfully.'
+            'Cập nhật nội quy nhà thành công.'
         );
     }
 
@@ -215,19 +244,28 @@ class HouseSettingController extends BaseController
         $setting = HouseSetting::find($id);
 
         if (is_null($setting)) {
-            return $this->sendError('House setting not found.');
+            return $this->sendError('Nội quy nhà không tồn tại.');
         }
 
         $currentUser = auth()->user();
-        if (!$currentUser || $currentUser->role->code !== 'admin') {
-            return $this->sendError('Unauthorized. Only admins can delete house settings.', [], 403);
+        if (!$currentUser) {
+            return $this->sendError('Không có quyền truy cập.', [], 401);
+        }
+
+        $isAdmin = $currentUser->role->code === 'admin';
+        $isManager = $currentUser->role->code === 'manager' &&
+            $setting->house &&
+            $setting->house->manager_id === $currentUser->id;
+
+        if (!$isAdmin && !$isManager) {
+            return $this->sendError('Chỉ quản trị viên hoặc quản lý nhà mới có thể xóa nội quy.', [], 403);
         }
 
         $setting->delete();
 
         return $this->sendResponse(
             [],
-            'House setting deleted successfully.'
+            'Xóa nội quy nhà thành công.'
         );
     }
 }

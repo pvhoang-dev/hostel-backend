@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class HouseSetting extends Model
 {
-    use SoftDeletes;
     protected $table = 'house_settings';
     protected $fillable = [
         'house_id',
