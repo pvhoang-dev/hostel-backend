@@ -119,7 +119,7 @@ class StorageController extends BaseController
     {
         $currentUser = auth()->user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized.', [], 401);
+            return $this->sendError('Chưa đăng nhập.', [], 401);
         }
 
         $validator = Validator::make($request->all(), [
@@ -136,16 +136,27 @@ class StorageController extends BaseController
             'quantity' => 'required|integer|min:0',
             'price' => 'nullable|integer|min:0',
             'description' => 'nullable|string',
+        ], [
+            'house_id.required' => 'Mã nhà là bắt buộc.',
+            'house_id.exists' => 'Mã nhà không tồn tại.',
+            'equipment_id.required' => 'Mã thiết bị là bắt buộc.',
+            'equipment_id.exists' => 'Mã thiết bị không tồn tại.',
+            'equipment_id.unique' => 'Thiết bị đã tồn tại trong kho.',
+            'quantity.required' => 'Số lượng là bắt buộc.',
+            'quantity.integer' => 'Số lượng phải là số nguyên.',
+            'quantity.min' => 'Số lượng phải lớn hơn 0.',
+            'price.integer' => 'Giá phải là số nguyên.',
+            'price.min' => 'Giá phải lớn hơn 0.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors(), 422);
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors(), 422);
         }
 
         $house = House::find($request->house_id);
 
         if (!$this->canManageStorage($currentUser, $house)) {
-            return $this->sendError('Unauthorized. Only admins or house managers can create equipment storage.', [], 403);
+            return $this->sendError('Không có quyền. Chỉ admin hoặc quản lý nhà mới có thể tạo kho thiết bị.', [], 403);
         }
 
         $storage = EquipmentStorage::create($request->all());
@@ -153,7 +164,7 @@ class StorageController extends BaseController
 
         return $this->sendResponse(
             new EquipmentStorageResource($storage),
-            'Equipment storage created successfully.'
+            'Tạo kho thiết bị thành công.'
         );
     }
 
@@ -168,12 +179,12 @@ class StorageController extends BaseController
         $storage = EquipmentStorage::with('equipment')->find($id);
 
         if (is_null($storage)) {
-            return $this->sendError('Equipment storage not found.');
+            return $this->sendError('Không tìm thấy kho thiết bị.');
         }
 
         return $this->sendResponse(
             new EquipmentStorageResource($storage),
-            'Equipment storage retrieved successfully.'
+            'Lấy thông tin kho thiết bị thành công.'
         );
     }
 
@@ -189,16 +200,16 @@ class StorageController extends BaseController
         $storage = EquipmentStorage::find($id);
 
         if (is_null($storage)) {
-            return $this->sendError('Equipment storage not found.');
+            return $this->sendError('Không tìm thấy kho thiết bị.');
         }
 
         $currentUser = auth()->user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized.', [], 401);
+            return $this->sendError('Chưa đăng nhập.', [], 401);
         }
 
         if (!$this->canManageStorage($currentUser, $storage->house)) {
-            return $this->sendError('Unauthorized. Only admins or house managers can update equipment storage.', [], 403);
+            return $this->sendError('Không có quyền. Chỉ admin hoặc quản lý nhà mới có thể cập nhật kho thiết bị.', [], 403);
         }
 
         $validator = Validator::make($request->all(), [
@@ -215,10 +226,21 @@ class StorageController extends BaseController
             'quantity' => 'sometimes|integer|min:0',
             'price' => 'nullable|integer|min:0',
             'description' => 'nullable|string',
+        ], [
+            'house_id.required' => 'Mã nhà là bắt buộc.',
+            'house_id.exists' => 'Mã nhà không tồn tại.',
+            'equipment_id.required' => 'Mã thiết bị là bắt buộc.',
+            'equipment_id.exists' => 'Mã thiết bị không tồn tại.',
+            'equipment_id.unique' => 'Thiết bị đã tồn tại trong kho.',
+            'quantity.required' => 'Số lượng là bắt buộc.',
+            'quantity.integer' => 'Số lượng phải là số nguyên.',
+            'quantity.min' => 'Số lượng phải lớn hơn 0.',
+            'price.integer' => 'Giá phải là số nguyên.',
+            'price.min' => 'Giá phải lớn hơn 0.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors(), 422);
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors(), 422);
         }
 
         $storage->update($request->all());
@@ -226,7 +248,7 @@ class StorageController extends BaseController
 
         return $this->sendResponse(
             new EquipmentStorageResource($storage),
-            'Equipment storage updated successfully.'
+            'Cập nhật kho thiết bị thành công.'
         );
     }
 
@@ -241,38 +263,42 @@ class StorageController extends BaseController
         $storage = EquipmentStorage::find($id);
 
         if (is_null($storage)) {
-            return $this->sendError('Equipment storage not found.');
+            return $this->sendError('Không tìm thấy kho thiết bị.');
         }
 
         $currentUser = auth()->user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized.', [], 401);
+            return $this->sendError('Chưa đăng nhập.', [], 401);
         }
 
         if (!$this->canManageStorage($currentUser, $storage->house)) {
-            return $this->sendError('Unauthorized. Only admins or house managers can delete equipment storage.', [], 403);
+            return $this->sendError('Không có quyền. Chỉ admin hoặc quản lý nhà mới có thể xóa kho thiết bị.', [], 403);
         }
 
         $storage->delete();
 
-        return $this->sendResponse(
-            [],
-            'Equipment storage deleted successfully.'
-        );
+        return $this->sendResponse([], 'Xóa kho thiết bị thành công.');
     }
 
     /**
-     * Check if user has permission to manage storage for a house
+     * Check if user can manage the equipment storage for a house.
      *
      * @param  \App\Models\User  $user
-     * @param  \App\Models\House|null  $house
+     * @param  \App\Models\House  $house
      * @return bool
      */
     private function canManageStorage($user, $house): bool
     {
-        $isAdmin = $user->role->code === 'admin';
-        $isManager = $house && $house->manager_id === $user->id;
+        // Admin can manage all storage
+        if ($user->role->code === 'admin') {
+            return true;
+        }
 
-        return $isAdmin || $isManager;
+        // Manager can only manage storage for houses they manage
+        if ($user->role->code === 'manager' && $house && $house->manager_id === $user->id) {
+            return true;
+        }
+
+        return false;
     }
 }
