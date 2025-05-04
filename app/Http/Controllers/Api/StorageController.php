@@ -176,7 +176,7 @@ class StorageController extends BaseController
      */
     public function show(int $id): JsonResponse
     {
-        $storage = EquipmentStorage::with('equipment')->find($id);
+        $storage = EquipmentStorage::with('equipment', 'house')->find($id);
 
         if (is_null($storage)) {
             return $this->sendError('Không tìm thấy kho thiết bị.');
