@@ -9,6 +9,7 @@ use App\Models\HouseSetting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class HouseSettingController extends BaseController
 {
@@ -121,7 +122,14 @@ class HouseSettingController extends BaseController
 
         $validator = Validator::make($request->all(), [
             'house_id' => 'required|exists:houses,id',
-            'key' => 'required|string|max:50|unique:house_settings,key',
+            'key' => [
+                'required',
+                'string',
+                'max:50',
+                Rule::unique('house_settings')->where(function ($query) use ($request) {
+                    return $query->where('house_id', $request->house_id);
+                })
+            ],
             'value' => 'required|string',
             'description' => 'nullable|string',
         ], [
@@ -207,7 +215,15 @@ class HouseSettingController extends BaseController
         }
 
         $validator = Validator::make($request->all(), [
-            'key' => 'sometimes|required|string|max:50|unique:house_settings,key,' . $setting->id,
+            'key' => [
+                'sometimes',
+                'required',
+                'string',
+                'max:50',
+                Rule::unique('house_settings')->where(function ($query) use ($request, $setting) {
+                    return $query->where('house_id', $setting->house_id);
+                })->ignore($setting->id)
+            ],
             'value' => 'sometimes|required|string',
             'description' => 'nullable|string',
         ], [
