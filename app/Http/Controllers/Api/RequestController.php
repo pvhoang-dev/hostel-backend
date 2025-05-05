@@ -222,7 +222,7 @@ class RequestController extends BaseController
     public function show(string $id): JsonResponse
     {
         $user = Auth::user();
-        $request = Request::with(['room.house', 'sender', 'recipient', 'comments.user', 'updater'])->find($id);
+        $request = Request::with(['room.house', 'sender.role', 'recipient.role', 'comments.user', 'updater'])->find($id);
 
         if (is_null($request)) {
             return $this->sendError('Request not found.');

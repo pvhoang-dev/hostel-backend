@@ -31,6 +31,7 @@ class AuthController extends BaseController
                 'username'  => $user->username,
                 'email'     => $user->email,
                 'role'      => $user->role->code,
+                'name'      => $user->name,
             ];
 
             return $this->sendResponse($success, 'User login successfully.');

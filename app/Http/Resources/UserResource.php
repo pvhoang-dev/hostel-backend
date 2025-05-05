@@ -20,10 +20,11 @@ class UserResource extends JsonResource
             'identity_card'    => $this->identity_card,
             'vehicle_plate'    => $this->vehicle_plate,
             'status'           => $this->status,
-            'role' => $this->whenLoaded('role', function() {
+            'role' => $this->whenLoaded('role', function () {
                 return [
                     'id'   => $this->role->id,
                     'name' => $this->role->name,
+                    'code' => $this->role->code,
                 ];
             }),
             'avatar_url'       => $this->avatar_url,

@@ -4,7 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\BaseController as BaseController;
 use App\Http\Resources\NotificationResource;
+use App\Models\House;
 use App\Models\Notification;
+use App\Models\Room;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -23,13 +26,68 @@ class NotificationController extends BaseController
 
         $query = Notification::query();
 
-        // Base filtering - users can only see their own notifications
-        // Admins might be allowed to see all notifications
-        if ($currentUser->role->code !== 'admin') {
+        // Xác định quyền của người dùng hiện tại
+        $isAdmin = $currentUser->role->code === 'admin';
+        $isManager = $currentUser->role->code === 'manager';
+
+        // Mặc định: Người dùng chỉ thấy thông báo của họ
+        $viewAll = $request->has('viewAll') && filter_var($request->viewAll, FILTER_VALIDATE_BOOLEAN);
+
+        if (!$viewAll) {
+            // Người dùng chỉ thấy thông báo của họ
             $query->where('user_id', $currentUser->id);
-        } elseif ($request->has('user_id')) {
-            // Admin can filter by specific user_id
-            $query->where('user_id', $request->user_id);
+        } else {
+            // Admin có thể xem tất cả
+            if ($isAdmin) {
+                // Không cần filter thêm gì, lấy tất cả
+            }
+            // Manager chỉ có thể xem thông báo của tenant trong nhà mà họ quản lý
+            else if ($isManager) {
+                // Lấy danh sách tenant của các nhà mà manager quản lý
+                $managedHouseIds = House::where('manager_id', $currentUser->id)->pluck('id')->toArray();
+
+                // Lấy danh sách phòng từ các nhà đó
+                $managedRoomIds = Room::whereIn('house_id', $managedHouseIds)->pluck('id')->toArray();
+
+                // Lấy danh sách tenant từ các phòng đó
+                $tenantIds = User::whereHas('contracts', function ($query) use ($managedRoomIds) {
+                    $query->whereIn('room_id', $managedRoomIds)->where('status', 'active');
+                })->where('role_id', function ($query) {
+                    $query->select('id')->from('roles')->where('code', 'tenant');
+                })->pluck('id')->toArray();
+
+                // Lấy thông báo của manager hoặc của các tenant
+                $query->where(function ($query) use ($currentUser, $tenantIds) {
+                    $query->where('user_id', $currentUser->id)
+                        ->orWhereIn('user_id', $tenantIds);
+                });
+            } else {
+                // Nếu không phải admin hoặc manager nhưng có param viewAll, vẫn chỉ hiện của họ
+                $query->where('user_id', $currentUser->id);
+            }
+        }
+
+        // Filter by specific user_id (nếu có quyền)
+        if ($request->has('user_id')) {
+            $userIdToFilter = $request->user_id;
+
+            // Kiểm tra quyền để filter theo user_id
+            $canFilterByUserId = false;
+
+            if ($isAdmin) {
+                // Admin có thể filter theo bất kỳ user_id nào
+                $canFilterByUserId = true;
+            } else if ($isManager && in_array($userIdToFilter, $tenantIds ?? [])) {
+                // Manager chỉ có thể filter theo user_id của tenant mà họ quản lý
+                $canFilterByUserId = true;
+            } else if ($userIdToFilter == $currentUser->id) {
+                // Người dùng có thể filter theo chính họ
+                $canFilterByUserId = true;
+            }
+
+            if ($canFilterByUserId) {
+                $query->where('user_id', $userIdToFilter);
+            }
         }
 
         // Filter by type
