@@ -26,17 +26,17 @@ class RequestController extends BaseController
         // Apply role-based filters
         if ($user->role->code === 'tenant') {
             // Tenants can only see requests they sent or received
-            $query->where(function($q) use ($user) {
+            $query->where(function ($q) use ($user) {
                 $q->where('sender_id', $user->id)
                     ->orWhere('recipient_id', $user->id);
             });
         } elseif ($user->role->code === 'manager') {
             // Managers can see requests they sent/received or from their houses
             $managedHouseIds = House::where('manager_id', $user->id)->pluck('id');
-            $query->where(function($q) use ($user, $managedHouseIds) {
+            $query->where(function ($q) use ($user, $managedHouseIds) {
                 $q->where('sender_id', $user->id)
                     ->orWhere('recipient_id', $user->id)
-                    ->orWhereHas('room', function($q2) use ($managedHouseIds) {
+                    ->orWhereHas('room', function ($q2) use ($managedHouseIds) {
                         $q2->whereIn('house_id', $managedHouseIds);
                     });
             });
@@ -160,7 +160,7 @@ class RequestController extends BaseController
             // Validate room belongs to tenant
             $hasAccess = Room::where('id', $input['room_id'])
                 ->whereHas('contracts', function ($q) use ($user) {
-                    $q->whereHas('tenants', function($q2) use ($user) {
+                    $q->whereHas('tenants', function ($q2) use ($user) {
                         $q2->where('users.id', $user->id);
                     });
                 })
@@ -181,7 +181,7 @@ class RequestController extends BaseController
                 $tenantBelongsToManager = Room::where('id', $input['room_id'])
                     ->whereIn('house_id', $managedHouseIds)
                     ->whereHas('contracts', function ($q) use ($recipient) {
-                        $q->whereHas('tenants', function($q2) use ($recipient) {
+                        $q->whereHas('tenants', function ($q2) use ($recipient) {
                             $q2->where('users.id', $recipient->id);
                         });
                     })

@@ -14,6 +14,7 @@ class RequestResource extends JsonResource
             'id'           => $this->id,
             'description'  => $this->description,
             'status'       => $this->status,
+            'request_type' => $this->request_type,
             'comments'     => RequestCommentResource::collection($this->whenLoaded('comments')),
             'room'         => new RoomResource($this->whenLoaded('room')),
             'sender'       => new UserResource($this->whenLoaded('sender')),

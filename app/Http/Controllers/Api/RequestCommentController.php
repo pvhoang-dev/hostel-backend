@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\BaseController as BaseController;
 use App\Http\Resources\RequestCommentResource;
-use App\Models\House;
 use App\Models\Request;
 use App\Models\RequestComment;
 use Illuminate\Http\JsonResponse;
