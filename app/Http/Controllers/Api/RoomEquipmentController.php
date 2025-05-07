@@ -6,7 +6,6 @@ use App\Http\Controllers\Api\BaseController as BaseController;
 use App\Http\Resources\RoomEquipmentResource;
 use App\Models\Room;
 use App\Models\RoomEquipment;
-use App\Models\Equipment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -42,10 +41,6 @@ class RoomEquipmentController extends BaseController
 
         if ($request->has('equipment_id')) {
             $query->where('equipment_id', $request->equipment_id);
-        }
-
-        if ($request->has('source')) {
-            $query->where('source', $request->source);
         }
 
         if ($request->has('min_quantity')) {
@@ -125,7 +120,6 @@ class RoomEquipmentController extends BaseController
         $validator = Validator::make($input, [
             'room_id' => 'required|exists:rooms,id',
             'equipment_id' => 'required|exists:equipments,id',
-            'source' => 'required|in:storage,custom',
             'quantity' => 'required|integer|min:1',
             'price' => 'required|integer|min:0',
             'description' => 'nullable|string',
@@ -148,6 +142,7 @@ class RoomEquipmentController extends BaseController
             return $this->sendError('Unauthorized. Only admins or house managers can manage room equipments.', [], 403);
         }
 
+        // Create room equipment
         $roomEquipment = RoomEquipment::create($input);
         $roomEquipment->load(['room', 'equipment']);
 
@@ -194,9 +189,8 @@ class RoomEquipmentController extends BaseController
         }
 
         $validator = Validator::make($request->all(), [
-            'equipment_id' => 'sometimes|required|exists:equipments,id', // Changed from nullable to required
+            'equipment_id' => 'sometimes|required|exists:equipments,id',
             'room_id' => 'sometimes|exists:rooms,id',
-            'source' => 'sometimes|in:storage,custom',
             'quantity' => 'sometimes|integer|min:1',
             'price' => 'sometimes|integer|min:0',
             'description' => 'nullable|string',

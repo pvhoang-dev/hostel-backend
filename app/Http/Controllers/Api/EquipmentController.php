@@ -35,7 +35,11 @@ class EquipmentController extends BaseController
 
         // Filter by name
         if ($request->has('name')) {
-            $query->where('name', 'like', '%' . $request->name . '%');
+            if ($request->has('exact') && $request->exact) {
+                $query->where('name', $request->name);
+            } else {
+                $query->where('name', 'like', '%' . $request->name . '%');
+            }
         }
 
         // Filter by room_id - find equipment linked to specific rooms

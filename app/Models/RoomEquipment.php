@@ -13,7 +13,6 @@ class RoomEquipment extends Model
     protected $fillable = [
         'equipment_id',
         'room_id',
-        'source',
         'quantity',
         'price',
         'description'
