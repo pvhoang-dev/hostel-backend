@@ -130,7 +130,7 @@ class RoomServiceController extends BaseController
             'price' => 'required|integer|min:0',
             'is_fixed' => 'required|boolean',
             'status' => 'sometimes|string|max:20',
-            'description' => 'sometimes|string',
+            'description' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -217,7 +217,7 @@ class RoomServiceController extends BaseController
             'price' => 'sometimes|integer|min:0',
             'is_fixed' => 'sometimes|boolean',
             'status' => 'sometimes|string|max:20',
-            'description' => 'sometimes|string',
+            'description' => 'sometimes|nullable|string',
         ]);
 
         if ($validator->fails()) {
