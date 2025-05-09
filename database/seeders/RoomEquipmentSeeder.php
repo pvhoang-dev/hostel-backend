@@ -22,7 +22,6 @@ class RoomEquipmentSeeder extends Seeder
                 RoomEquipment::firstOrCreate(
                     ['room_id' => $room->id, 'equipment_id' => $equipment->id],
                     [
-                        'source' => 'custom',
                         'quantity' => rand(1, 2),
                         'price' => rand(500000, 3000000),
                         'description' => "Standard {$equipment->name} for room use",
