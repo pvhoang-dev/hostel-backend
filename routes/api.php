@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\EquipmentController;
 use App\Http\Controllers\Api\HouseController;
 use App\Http\Controllers\Api\HouseSettingController;
 use App\Http\Controllers\Api\InvoiceController;
+use App\Http\Controllers\Api\MonthlyServiceController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PaymentMethodController;
 use App\Http\Controllers\Api\PermissionController;
@@ -80,4 +81,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Transactions
     Route::resource('transactions', TransactionController::class);
+
+    // Monthly Service Management
+    Route::get('/monthly-services/houses', [MonthlyServiceController::class, 'getAvailableHouses']);
+    Route::get('/monthly-services/rooms', [MonthlyServiceController::class, 'getRoomsNeedingUpdate']);
+    Route::get('/monthly-services/rooms/{roomId}', [MonthlyServiceController::class, 'getRoomServices']);
+    Route::post('/monthly-services/save', [MonthlyServiceController::class, 'saveRoomServiceUsage']);
 });
