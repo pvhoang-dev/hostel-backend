@@ -68,6 +68,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Contracts
     Route::resource('contracts', ContractController::class);
+    Route::get('/available-tenants', [ContractController::class, 'getAvailableTenants']);
 
     // Requests
     Route::resource('requests', RequestController::class);

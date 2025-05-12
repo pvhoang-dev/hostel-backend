@@ -168,6 +168,13 @@ class UserController extends BaseController
             if (in_array('managedHouses', $includes)) $with[] = 'housesManaged';
         }
 
+        // Lọc người dùng không có hợp đồng active
+        if ($request->has('without_active_contract') && $request->without_active_contract === 'true') {
+            $query->whereDoesntHave('contracts', function ($query) {
+                $query->where('status', 'active');
+            });
+        }
+
         // Sorting
         $sortField = $request->get('sort_by', 'id');
         $sortDirection = $request->get('sort_dir', 'asc');
