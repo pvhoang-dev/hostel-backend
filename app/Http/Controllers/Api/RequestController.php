@@ -160,7 +160,7 @@ class RequestController extends BaseController
             // Validate room belongs to tenant
             $hasAccess = Room::where('id', $input['room_id'])
                 ->whereHas('contracts', function ($q) use ($user) {
-                    $q->whereHas('tenants', function ($q2) use ($user) {
+                    $q->whereHas('users', function ($q2) use ($user) {
                         $q2->where('users.id', $user->id);
                     });
                 })
@@ -181,7 +181,7 @@ class RequestController extends BaseController
                 $tenantBelongsToManager = Room::where('id', $input['room_id'])
                     ->whereIn('house_id', $managedHouseIds)
                     ->whereHas('contracts', function ($q) use ($recipient) {
-                        $q->whereHas('tenants', function ($q2) use ($recipient) {
+                        $q->whereHas('users', function ($q2) use ($recipient) {
                             $q2->where('users.id', $recipient->id);
                         });
                     })

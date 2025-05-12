@@ -24,33 +24,79 @@ class UserController extends BaseController
         $currentUser = auth()->user();
         $query = User::query();
 
+        // Check if this is a request to get recipients for creating requests
+        $isForRequestRecipients = $request->has('for_requests') && $request->for_requests === 'true';
+
         // Apply role-based access control
         if ($currentUser->role?->code === 'admin') {
             // Admin can see all users, no filter needed
         } elseif ($currentUser->role?->code === 'manager') {
-            // Manager can see their own profile and tenants from houses they manage
-
-            // Get all houses managed by this manager
-            $managedHouseIds = $currentUser->housesManaged()->pluck('id')->toArray();
-
-            $query->where(function ($q) use ($currentUser, $managedHouseIds) {
-                // Manager can see their own profile
-                $q->where('id', $currentUser->id)
-                    // Or tenants from contracts in rooms of houses they manage
-                    ->orWhere(function ($q2) use ($managedHouseIds) {
-                        $q2->whereHas('role', function ($roleQuery) {
-                            $roleQuery->where('code', 'tenant');
-                        })
-                            ->whereHas('contracts', function ($contractQuery) use ($managedHouseIds) {
-                                $contractQuery->whereHas('room', function ($roomQuery) use ($managedHouseIds) {
-                                    $roomQuery->whereIn('house_id', $managedHouseIds);
+            // Nếu đây là yêu cầu lấy danh sách người nhận cho Request
+            if ($isForRequestRecipients) {
+                // Cho phép manager lấy tất cả admin và tenant từ nhà họ quản lý
+                $managedHouseIds = $currentUser->housesManaged()->pluck('id')->toArray();
+                
+                $query->where(function ($q) use ($currentUser, $managedHouseIds) {
+                    // Manager có thể thấy admin
+                    $q->whereHas('role', function ($roleQuery) {
+                        $roleQuery->where('code', 'admin');
+                    })
+                    // Hoặc tenant từ nhà họ quản lý
+                    ->orWhere(function ($q2) use ($managedHouseIds, $currentUser) {
+                        $q2->where('id', $currentUser->id) // Thấy chính họ
+                            ->orWhere(function ($q3) use ($managedHouseIds) {
+                                $q3->whereHas('role', function ($roleQuery) {
+                                    $roleQuery->where('code', 'tenant');
+                                })
+                                ->whereHas('contracts', function ($contractQuery) use ($managedHouseIds) {
+                                    $contractQuery->whereHas('room', function ($roomQuery) use ($managedHouseIds) {
+                                        $roomQuery->whereIn('house_id', $managedHouseIds);
+                                    });
                                 });
                             });
                     });
-            });
+                });
+            } else {
+                // Logic thông thường cho manager khi không phải lấy danh sách người nhận
+                // Manager can see their own profile and tenants from houses they manage
+                $managedHouseIds = $currentUser->housesManaged()->pluck('id')->toArray();
+
+                $query->where(function ($q) use ($currentUser, $managedHouseIds) {
+                    // Manager can see their own profile
+                    $q->where('id', $currentUser->id)
+                        // Or tenants from contracts in rooms of houses they manage
+                        ->orWhere(function ($q2) use ($managedHouseIds) {
+                            $q2->whereHas('role', function ($roleQuery) {
+                                $roleQuery->where('code', 'tenant');
+                            })
+                                ->whereHas('contracts', function ($contractQuery) use ($managedHouseIds) {
+                                    $contractQuery->whereHas('room', function ($roomQuery) use ($managedHouseIds) {
+                                        $roomQuery->whereIn('house_id', $managedHouseIds);
+                                    });
+                                });
+                        });
+                });
+            }
         } else {
-            // Other users (tenants) can only see their own profile
-            $query->where('id', $currentUser->id);
+            // Logic cho tenant
+            if ($isForRequestRecipients) {
+                // Tenant có thể thấy manager quản lý nhà họ đang ở
+                $query->whereHas('role', function ($roleQuery) {
+                    $roleQuery->where('code', 'manager');
+                })
+                ->whereHas('housesManaged', function ($houseQuery) use ($currentUser) {
+                    $houseQuery->whereHas('rooms', function ($roomQuery) use ($currentUser) {
+                        $roomQuery->whereHas('contracts', function ($contractQuery) use ($currentUser) {
+                            $contractQuery->whereHas('tenants', function ($tenantQuery) use ($currentUser) {
+                                $tenantQuery->where('users.id', $currentUser->id);
+                            });
+                        });
+                    });
+                });
+            } else {
+                // Other users (tenants) can only see their own profile
+                $query->where('id', $currentUser->id);
+            }
         }
 
         // Apply filters
@@ -108,7 +154,7 @@ class UserController extends BaseController
         }
 
         if ($request->has('role')) {
-            $roleCodes = explode(',', $request->role);
+            $roleCodes = is_array($request->role) ? $request->role : explode(',', $request->role);
             $query->whereHas('role', function ($query) use ($roleCodes) {
                 $query->whereIn('code', $roleCodes);
             });
