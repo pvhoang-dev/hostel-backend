@@ -8,11 +8,15 @@ use App\Models\Room;
 use App\Models\RoomService;
 use App\Models\Service;
 use App\Models\ServiceUsage;
+use App\Models\Invoice;
+use App\Models\InvoiceItem;
+use App\Models\Transaction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class MonthlyServiceController extends BaseController
 {
@@ -58,10 +62,17 @@ class MonthlyServiceController extends BaseController
 
         $rooms = $query->get();
 
-        // Add a flag indicating if the room needs updates 
-        $roomsWithNeedUpdateFlag = $rooms->map(function ($room) use ($month, $year) {
-            $needsUpdate = false;
+        // Trước tiên, lọc ra những phòng có dịch vụ
+        $roomsWithServices = $rooms->filter(function ($room) {
+            // Kiểm tra xem phòng có dịch vụ hay không
+            $hasServicesRoom = RoomService::where('room_id', $room->id)->exists();
+            return $hasServicesRoom;
+        });
 
+        // Add a flag indicating if the room needs updates 
+        $roomsWithNeedUpdateFlag = $roomsWithServices->map(function ($room) use ($month, $year) {
+            $needsUpdate = false;
+            
             // Room needs update if any of its services don't have usage records for this month/year
             foreach ($room->services as $roomService) {
                 if ($roomService->status === 'active') {
@@ -89,7 +100,7 @@ class MonthlyServiceController extends BaseController
         return $this->sendResponse([
             'rooms' => $finalRooms->values(),
             'count' => $finalRooms->count(),
-            'total_rooms' => $rooms->count()
+            'total_rooms' => $roomsWithServices->count()
         ], 'Rooms retrieved successfully.');
     }
 
@@ -231,6 +242,7 @@ class MonthlyServiceController extends BaseController
         DB::beginTransaction();
         try {
             $savedServices = [];
+            $totalAmount = 0;
 
             foreach ($services as $serviceData) {
                 $roomServiceId = $serviceData['room_service_id'];
@@ -267,14 +279,57 @@ class MonthlyServiceController extends BaseController
                     ]
                 );
 
+                // Tính tổng tiền cho hóa đơn
+                $amount = $serviceData['usage_value'] * $serviceData['price_used'];
+                $totalAmount += $amount;
+
                 $savedServices[] = $serviceUsage;
             }
 
+            // Tự động tạo hóa đơn cho dịch vụ hàng tháng
+            $invoice = Invoice::create([
+                'room_id' => $roomId,
+                'invoice_type' => 'service_usage',
+                'total_amount' => $totalAmount,
+                'month' => $month,
+                'year' => $year,
+                'description' => "Hóa đơn dịch vụ tháng $month/$year",
+                'created_by' => $user->id,
+                'updated_by' => $user->id,
+            ]);
+
+            // Tạo các invoice_item tương ứng với các dịch vụ
+            foreach ($savedServices as $serviceUsage) {
+                $roomService = RoomService::with('service')->find($serviceUsage->room_service_id);
+                $amount = $serviceUsage->usage_value * $serviceUsage->price_used;
+
+                $invoiceItem = InvoiceItem::create([
+                    'invoice_id' => $invoice->id,
+                    'source_type' => 'service_usage',
+                    'service_usage_id' => $serviceUsage->id,
+                    'amount' => $amount,
+                    'description' => "Phí dịch vụ {$roomService->service->name} tháng $month/$year",
+                ]);
+            }
+
+            // Tự động tạo transaction với trạng thái pending và payment_method_id = 1
+            $transaction = Transaction::create([
+                'invoice_id' => $invoice->id,
+                'payment_method_id' => 1, // ID của payment method mặc định
+                'amount' => $totalAmount,
+                'transaction_code' => 'TXN-' . Str::random(8) . '-' . time(),
+                'status' => 'pending',
+                'payment_date' => now(),
+            ]);
+
             DB::commit();
+
             return $this->sendResponse([
                 'saved_services' => $savedServices,
+                'invoice' => $invoice->load('items'),
+                'transaction' => $transaction,
                 'count' => count($savedServices)
-            ], 'Room service usages saved successfully.');
+            ], 'Room service usages saved and invoice generated successfully.');
         } catch (\Exception $e) {
             DB::rollback();
             return $this->sendError('Error saving service usages', ['error' => $e->getMessage()]);

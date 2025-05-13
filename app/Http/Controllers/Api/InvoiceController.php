@@ -251,7 +251,7 @@ class InvoiceController extends BaseController
     public function show(string $id): JsonResponse
     {
         $user = Auth::user();
-        $invoice = Invoice::with(['room.house', 'items.service_usage', 'transactions', 'creator', 'updater'])->find($id);
+        $invoice = Invoice::with(['room.house', 'items.service_usage.roomService.service', 'transactions', 'creator', 'updater'])->find($id);
 
         if (is_null($invoice)) {
             return $this->sendError('Invoice not found.');
