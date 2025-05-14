@@ -22,6 +22,9 @@ class DatabaseSeeder extends Seeder
             RoomEquipmentSeeder::class,
             ServiceSeeder::class,
             RoomServiceSeeder::class,
+            SystemSettingSeeder::class,
+            HouseSettingSeeder::class, 
+            StorageSeeder::class,
             ContractSeeder::class,
         ]);
     }

@@ -35,6 +35,9 @@ return new class extends Migration {
             if (!Schema::hasColumn('users', 'notification_preferences')) {
                 $table->text('notification_preferences')->nullable()->after('avatar_url');
             }
+            if (!Schema::hasColumn('users', 'description')) {
+                $table->text('description')->nullable()->after('notification_preferences');
+            }
             if (!Schema::hasColumn('users', 'deleted_at')) {
                 $table->softDeletes();
             }
@@ -44,6 +47,9 @@ return new class extends Migration {
     public function down(): void
     {
         Schema::table('users', function (Blueprint $table) {
+            if (Schema::hasColumn('users', 'description')) {
+                $table->dropColumn('description');
+            }
             if (Schema::hasColumn('users', 'notification_preferences')) {
                 $table->dropColumn('notification_preferences');
             }
