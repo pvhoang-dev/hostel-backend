@@ -11,51 +11,50 @@ class EquipmentSeeder extends Seeder
     {
         $equipments = [
             // Thiết bị điện lạnh
-            ['name' => 'Điều hòa', 'description' => 'Điều hòa nhiệt độ treo tường'],
-            ['name' => 'Quạt trần', 'description' => 'Quạt trần loại thông thường'],
-            ['name' => 'Quạt đứng', 'description' => 'Quạt đứng có chế độ xoay 180 độ'],
+            ['name' => 'Điều hòa'],
+            ['name' => 'Quạt trần'],
+            ['name' => 'Quạt đứng'],
             
             // Đồ nội thất phòng ngủ
-            ['name' => 'Giường đơn', 'description' => 'Giường đơn kích thước 1m x 2m'],
-            ['name' => 'Giường đôi', 'description' => 'Giường đôi kích thước 1.6m x 2m'],
-            ['name' => 'Tủ quần áo', 'description' => 'Tủ đựng quần áo gỗ công nghiệp'],
-            ['name' => 'Kệ đầu giường', 'description' => 'Kệ nhỏ đặt đầu giường'],
-            ['name' => 'Đệm', 'description' => 'Đệm cao su hoặc mút'],
+            ['name' => 'Giường đơn'],
+            ['name' => 'Giường đôi'],
+            ['name' => 'Tủ quần áo'],
+            ['name' => 'Kệ đầu giường'],
+            ['name' => 'Đệm'],
             
             // Thiết bị nhà bếp
-            ['name' => 'Tủ lạnh', 'description' => 'Tủ lạnh mini hoặc loại lớn'],
-            ['name' => 'Bếp từ', 'description' => 'Bếp từ đơn hoặc đôi'],
-            ['name' => 'Bếp gas', 'description' => 'Bếp gas mini loại 2 lò'],
-            ['name' => 'Lò vi sóng', 'description' => 'Lò vi sóng cỡ nhỏ'],
-            ['name' => 'Ấm đun nước', 'description' => 'Ấm đun nước siêu tốc'],
-            ['name' => 'Tủ bếp', 'description' => 'Tủ đựng đồ nhà bếp'],
+            ['name' => 'Tủ lạnh'],
+            ['name' => 'Bếp từ'],
+            ['name' => 'Bếp gas'],
+            ['name' => 'Lò vi sóng'],
+            ['name' => 'Ấm đun nước'],
+            ['name' => 'Tủ bếp'],
             
             // Đồ dùng phòng tắm
-            ['name' => 'Máy nước nóng', 'description' => 'Máy nước nóng trực tiếp'],
-            ['name' => 'Vòi sen', 'description' => 'Vòi sen cây loại thường'],
+            ['name' => 'Máy nước nóng'],
+            ['name' => 'Vòi sen'],
             
             // Nội thất phòng khách/làm việc
-            ['name' => 'Bàn làm việc', 'description' => 'Bàn làm việc/học tập'],
-            ['name' => 'Ghế văn phòng', 'description' => 'Ghế xoay dùng cho bàn làm việc'],
-            ['name' => 'Ghế thường', 'description' => 'Ghế gỗ/nhựa thông thường'],
-            ['name' => 'Sofa', 'description' => 'Sofa mini hoặc sofa đơn'],
-            ['name' => 'Bàn trà', 'description' => 'Bàn nhỏ để tiếp khách'],
-            ['name' => 'Kệ sách', 'description' => 'Kệ để sách và đồ dùng cá nhân'],
+            ['name' => 'Bàn làm việc'],
+            ['name' => 'Ghế văn phòng'],
+            ['name' => 'Ghế thường'],
+            ['name' => 'Sofa'],
+            ['name' => 'Bàn trà'],
+            ['name' => 'Kệ sách'],
             
             // Thiết bị điện tử
-            ['name' => 'Tivi', 'description' => 'Ti vi màn hình phẳng'],
-            ['name' => 'Đầu thu K+', 'description' => 'Đầu thu truyền hình K+'],
-            ['name' => 'Router wifi', 'description' => 'Thiết bị phát wifi'],
+            ['name' => 'Tivi'],
+            ['name' => 'Đầu thu K+'],
+            ['name' => 'Router wifi'],
             
             // Thiết bị an ninh
-            ['name' => 'Khóa cửa thông minh', 'description' => 'Khóa cửa điện tử hoặc khóa vân tay'],
-            ['name' => 'Camera an ninh', 'description' => 'Camera giám sát khu vực chung'],
+            ['name' => 'Khóa cửa thông minh'],
+            ['name' => 'Camera an ninh'],
         ];
 
         foreach ($equipments as $equipment) {
             Equipment::firstOrCreate(
                 ['name' => $equipment['name']],
-                // ['description' => $equipment['description']]
             );
         }
     }

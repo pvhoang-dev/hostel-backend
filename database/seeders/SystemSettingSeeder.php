@@ -16,73 +16,61 @@ class SystemSettingSeeder extends Seeder
             [
                 'key' => '1',
                 'value' => 'H-Hostel - Hệ thống quản lý nhà trọ',
-                'type' => 'string',
                 'description' => 'Tên công ty quản lý nhà trọ'
             ],
             [
                 'key' => '2',
                 'value' => '25 Tạ Quang Bửu, Bách Khoa, Hai Bà Trưng, Hà Nội',
-                'type' => 'string',
                 'description' => 'Địa chỉ văn phòng công ty'
             ],
             [
                 'key' => '3',
                 'value' => '0985123456',
-                'type' => 'string',
                 'description' => 'Số điện thoại liên hệ'
             ],
             [
                 'key' => '4',
                 'value' => 'hhostel@example.com',
-                'type' => 'string',
                 'description' => 'Email liên hệ'
             ],
             [
                 'key' => '5',
                 'value' => 'Thứ 2 - Thứ 6: 8:00 - 17:30, Thứ 7: 8:00 - 12:00',
-                'type' => 'string',
                 'description' => 'Giờ làm việc'
             ],
             [
                 'key' => '6',
                 'value' => 'Thanh toán tiền thuê nhà đúng hạn, giữ vệ sinh chung, không gây ồn sau 22:00',
-                'type' => 'string',
                 'description' => 'Nội quy chung của nhà trọ'
             ],
             [
                 'key' => '7',
                 'value' => 'Tiền thuê thanh toán từ ngày 1-10 hàng tháng, phí trễ hạn 50k/ngày',
-                'type' => 'string',
                 'description' => 'Quy định thanh toán'
             ],
             [
                 'key' => '8',
                 'value' => 'Quản lý: 0985123456, Bảo vệ: 0978123456, Cứu hỏa: 114, Cấp cứu: 115',
-                'type' => 'string',
                 'description' => 'Số điện thoại khẩn cấp'
             ],
             [
                 'key' => '9',
                 'value' => 'Tạo yêu cầu trên hệ thống, đội bảo trì sẽ liên hệ trong vòng 24 giờ',
-                'type' => 'string',
                 'description' => 'Quy trình bảo trì sửa chữa'
             ],
             [
                 'key' => '10',
                 'value' => 'Chào mừng bạn đến với H-Hostel! Chúng tôi rất vui khi được đồng hành cùng bạn.',
-                'type' => 'string',
                 'description' => 'Thông điệp chào mừng khách thuê mới'
             ],
             [
                 'key' => '11',
                 'value' => 'Thông báo hạn thanh toán, cập nhật bảo trì, thông báo chung',
-                'type' => 'string',
                 'description' => 'Cài đặt thông báo hệ thống'
             ],
             [
                 'key' => '12',
                 'value' => 'Mã số thuế: 0123456789, VAT: 10%, Đã bao gồm thuế VAT',
-                'type' => 'string',
                 'description' => 'Thông tin thuế'
             ]
         ];
