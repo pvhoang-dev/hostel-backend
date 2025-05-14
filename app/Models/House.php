@@ -63,7 +63,6 @@ class House extends Model
                     
                     // Xóa các dịch vụ phòng
                     foreach ($room->services as $service) {
-                        // Xóa các lần sử dụng dịch vụ
                         foreach ($service->usages as $usage) {
                             $usage->delete();
                         }

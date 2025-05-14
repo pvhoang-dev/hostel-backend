@@ -166,14 +166,20 @@ class InvoiceController extends BaseController
             return $this->sendError('Unauthorized', ['error' => 'You can only create invoices for rooms in houses you manage'], 403);
         }
 
-        // Check if an invoice already exists for this room in the specified month/year
-        $existingInvoice = Invoice::where('room_id', $input['room_id'])
-            ->where('month', $input['month'])
-            ->where('year', $input['year'])
-            ->first();
-
-        if ($existingInvoice) {
-            return $this->sendError('Validation Error.', ['invoice' => 'An invoice already exists for this room in the specified month/year']);
+        // Chỉ kiểm tra nếu đang tạo hóa đơn loại service_usage
+        if ($input['invoice_type'] === 'service_usage') {
+            // Kiểm tra xem đã có hóa đơn service_usage nào cho phòng/tháng/năm này chưa
+            $existingInvoice = Invoice::where('room_id', $input['room_id'])
+                ->where('month', $input['month'])
+                ->where('year', $input['year'])
+                ->where('invoice_type', 'service_usage')
+                ->first();
+            
+            if ($existingInvoice) {
+                return $this->sendError('Validation Error.', [
+                    'invoice' => 'Đã tồn tại hóa đơn cho phòng này trong tháng '.$input['month'].'/'.$input['year'].'.'
+                ]);
+            }
         }
 
         // Validate service_usage_id if provided
@@ -275,7 +281,11 @@ class InvoiceController extends BaseController
     {
         $user = Auth::user();
         $input = $request->all();
-        $invoice = Invoice::with('room.house')->find($id);
+        
+        // Log toàn bộ dữ liệu đầu vào để debug
+        \Illuminate\Support\Facades\Log::info('Update invoice input data:', ['input' => $input, 'id' => $id]);
+        
+        $invoice = Invoice::with(['room.house', 'items'])->find($id);
 
         if (is_null($invoice)) {
             return $this->sendError('Invoice not found.');
@@ -286,110 +296,128 @@ class InvoiceController extends BaseController
             return $this->sendError('Unauthorized', ['error' => 'You do not have permission to update this invoice'], 403);
         }
 
-        $validator = Validator::make($input, [
-            'invoice_type' => 'sometimes|in:custom,service_usage',
-            'description' => 'sometimes|nullable|string',
-            'items' => 'sometimes|array',
-            'items.*.id' => 'sometimes|exists:invoice_items,id',
-            'items.*.source_type' => 'required_with:items|in:manual,service_usage',
-            'items.*.service_usage_id' => 'required_if:items.*.source_type,service_usage|exists:service_usage,id|nullable',
-            'items.*.amount' => 'required_with:items|integer|min:0',
-            'items.*.description' => 'sometimes|nullable|string',
-        ]);
-
-        if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
-        }
-
-        // Validate service_usage_id if provided
-        if (isset($input['items'])) {
-            foreach ($input['items'] as $item) {
-                if (isset($item['source_type']) && $item['source_type'] === 'service_usage' && isset($item['service_usage_id'])) {
-                    $serviceUsage = ServiceUsage::with('roomService')->find($item['service_usage_id']);
-
-                    if (!$serviceUsage) {
-                        return $this->sendError('Validation Error.', ['items' => 'Service usage not found']);
-                    }
-
-                    // Check if service usage belongs to a room service in the specified room
-                    if ($serviceUsage->roomService->room_id !== $invoice->room_id) {
-                        return $this->sendError(
-                            'Validation Error.',
-                            ['items' => 'Service usage must belong to the same room as the invoice']
-                        );
-                    }
-
-                    // Check if service usage is for the specified month/year
-                    if ($serviceUsage->month != $invoice->month || $serviceUsage->year != $invoice->year) {
-                        return $this->sendError(
-                            'Validation Error.',
-                            ['items' => 'Service usage month/year must match invoice month/year']
-                        );
-                    }
-                }
-            }
-        }
-
         try {
+            // Bắt đầu transaction
             DB::beginTransaction();
-
-            // Update invoice
-            $invoiceData = collect($input)->only(['invoice_type', 'description'])->toArray();
-            if (!empty($invoiceData)) {
-                $invoiceData['updated_by'] = $user->id;
-                $invoice->update($invoiceData);
+            
+            // Cập nhật mô tả nếu có
+            if (isset($input['description'])) {
+                $invoice->description = $input['description'];
+                $invoice->updated_by = $user->id;
+                $invoice->save();
             }
-
-            // Update invoice items if provided
-            if (isset($input['items'])) {
-                // Get existing item IDs
-                $existingItemIds = $invoice->items->pluck('id')->toArray();
-                $updatedItemIds = [];
-
-                foreach ($input['items'] as $itemData) {
-                    if (isset($itemData['id'])) {
-                        // Update existing item
-                        $item = InvoiceItem::find($itemData['id']);
-                        if ($item && $item->invoice_id == $invoice->id) {
-                            $item->update([
-                                'source_type' => $itemData['source_type'],
-                                'service_usage_id' => $itemData['service_usage_id'] ?? null,
-                                'amount' => $itemData['amount'],
-                                'description' => $itemData['description'] ?? null,
-                            ]);
-                            $updatedItemIds[] = $item->id;
-                        }
-                    } else {
-                        // Create new item
-                        $item = $invoice->items()->create([
-                            'source_type' => $itemData['source_type'],
-                            'service_usage_id' => $itemData['service_usage_id'] ?? null,
-                            'amount' => $itemData['amount'],
-                            'description' => $itemData['description'] ?? null,
-                        ]);
-                        $updatedItemIds[] = $item->id;
+            
+            // Trích xuất tất cả ID của các item trong request
+            $requestItemIds = [];
+            if (isset($input['items']) && is_array($input['items'])) {
+                foreach ($input['items'] as $item) {
+                    if (isset($item['id']) && !empty($item['id'])) {
+                        $requestItemIds[] = (int)$item['id'];
                     }
                 }
-
-                // Delete items not in the update list
-                $itemsToDelete = array_diff($existingItemIds, $updatedItemIds);
-                if (!empty($itemsToDelete)) {
-                    InvoiceItem::whereIn('id', $itemsToDelete)->delete();
-                }
-
-                // Recalculate total amount
-                $totalAmount = $invoice->items()->sum('amount');
-                $invoice->update(['total_amount' => $totalAmount]);
             }
-
+            
+            // Lấy tất cả item manual hiện có của invoice
+            $existingManualItems = InvoiceItem::where('invoice_id', $invoice->id)
+                ->where('source_type', 'manual')
+                ->get();
+            
+            // Xóa các item manual không nằm trong danh sách gửi lên
+            foreach ($existingManualItems as $manualItem) {
+                if (!in_array($manualItem->id, $requestItemIds)) {
+                    \Illuminate\Support\Facades\Log::info('Deleting manual item not in request:', ['id' => $manualItem->id]);
+                    $manualItem->delete();
+                }
+            }
+            
+            // Nếu có items gửi lên, xử lý từng item
+            if (isset($input['items']) && is_array($input['items'])) {
+                foreach ($input['items'] as $index => $itemData) {
+                    // Log thông tin chi tiết về từng item
+                    \Illuminate\Support\Facades\Log::info('Processing item:', ['index' => $index, 'item' => $itemData]);
+                    
+                    // Kiểm tra nếu là item mới (không có ID hoặc ID rỗng)
+                    if (!isset($itemData['id']) || empty($itemData['id'])) {
+                        $newItem = new InvoiceItem();
+                        $newItem->invoice_id = $invoice->id;
+                        $newItem->source_type = $itemData['source_type'] ?? 'manual';
+                        $newItem->amount = $itemData['amount'] ?? 0;
+                        $newItem->description = $itemData['description'] ?? '';
+                        $newItem->service_usage_id = isset($itemData['service_usage_id']) && !empty($itemData['service_usage_id']) 
+                            ? (is_array($itemData['service_usage_id']) 
+                                ? (isset($itemData['service_usage_id']['id']) ? $itemData['service_usage_id']['id'] : null) 
+                                : $itemData['service_usage_id']) 
+                            : null;
+                        
+                        $saveResult = $newItem->save();
+                        \Illuminate\Support\Facades\Log::info('New item save result:', [
+                            'success' => $saveResult, 
+                            'item' => $newItem->toArray()
+                        ]);
+                    } else {
+                        // Cập nhật item hiện có
+                        $existingItem = InvoiceItem::where('id', $itemData['id'])
+                            ->where('invoice_id', $invoice->id)
+                            ->first();
+                            
+                        if ($existingItem) {
+                            // Chỉ cập nhật các item manual
+                            if ($existingItem->source_type === 'manual') {
+                                $existingItem->amount = $itemData['amount'] ?? $existingItem->amount;
+                                $existingItem->description = $itemData['description'] ?? $existingItem->description;
+                                $existingItem->save();
+                            }
+                            
+                            \Illuminate\Support\Facades\Log::info('Updated existing item:', [
+                                'id' => $existingItem->id,
+                                'type' => $existingItem->source_type
+                            ]);
+                        }
+                    }
+                }
+            }
+            
+            // Xử lý xóa các service_usage_id được chỉ định
+            if (isset($input['deleted_service_usage_ids']) && is_array($input['deleted_service_usage_ids']) && !empty($input['deleted_service_usage_ids'])) {
+                foreach ($input['deleted_service_usage_ids'] as $index => $usageId) {
+                    $normalizedId = is_array($usageId) && isset($usageId['id']) ? $usageId['id'] : $usageId;
+                    \Illuminate\Support\Facades\Log::info('Deleting service usage:', ['index' => $index, 'id' => $normalizedId]);
+                    
+                    if (empty($normalizedId)) continue;
+                    
+                    // Xóa items liên quan đến service_usage_id này
+                    InvoiceItem::where('invoice_id', $invoice->id)
+                        ->where('service_usage_id', $normalizedId)
+                        ->delete();
+                        
+                    // Xóa service_usage
+                    ServiceUsage::where('id', $normalizedId)->delete();
+                }
+            }
+            
+            // Tính lại tổng tiền
+            $totalAmount = InvoiceItem::where('invoice_id', $invoice->id)->sum('amount');
+            $invoice->total_amount = $totalAmount;
+            $invoice->save();
+            
+            // Đếm số lượng items sau khi cập nhật
+            $itemCount = InvoiceItem::where('invoice_id', $invoice->id)->count();
+            \Illuminate\Support\Facades\Log::info('Final item count:', ['count' => $itemCount]);
+            
+            // Tải lại invoice với tất cả quan hệ
+            $refreshedInvoice = Invoice::with(['room.house', 'items.service_usage.roomService.service', 'updater'])->find($invoice->id);
+            \Illuminate\Support\Facades\Log::info('Refreshed invoice item count:', ['count' => $refreshedInvoice->items->count()]);
+            
+            // Commit transaction
             DB::commit();
-
+            
             return $this->sendResponse(
-                new InvoiceResource($invoice->load(['room', 'items', 'updater'])),
+                new InvoiceResource($refreshedInvoice),
                 'Invoice updated successfully.'
             );
         } catch (\Exception $e) {
             DB::rollBack();
+            \Illuminate\Support\Facades\Log::error('Error updating invoice:', ['exception' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             return $this->sendError('Update Error.', ['error' => $e->getMessage()]);
         }
     }
@@ -400,7 +428,7 @@ class InvoiceController extends BaseController
     public function destroy(string $id): JsonResponse
     {
         $user = Auth::user();
-        $invoice = Invoice::with('room.house')->find($id);
+        $invoice = Invoice::with(['room.house', 'transactions'])->find($id);
 
         if (is_null($invoice)) {
             return $this->sendError('Invoice not found.');
@@ -411,14 +439,22 @@ class InvoiceController extends BaseController
             return $this->sendError('Unauthorized', ['error' => 'You do not have permission to delete this invoice'], 403);
         }
 
-        // Check if invoice has completed transactions
-        if ($invoice->transactions()->exists()) {
-            return $this->sendError('Delete Error.', ['error' => 'Cannot delete an invoice with associated transactions']);
+        try {
+            DB::beginTransaction();
+            
+            // Xóa tất cả giao dịch liên quan trước
+            $invoice->transactions()->delete();
+            
+            // Sau đó xóa hóa đơn
+            $invoice->delete();
+            
+            DB::commit();
+            
+            return $this->sendResponse([], 'Invoice and related transactions deleted successfully.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return $this->sendError('Delete Error.', ['error' => $e->getMessage()]);
         }
-
-        $invoice->delete();
-
-        return $this->sendResponse([], 'Invoice deleted successfully.');
     }
 
     /**

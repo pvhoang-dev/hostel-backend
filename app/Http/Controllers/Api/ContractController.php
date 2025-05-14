@@ -48,6 +48,12 @@ class ContractController extends BaseController
             $query->where('status', $request->status);
         }
 
+        if ($request->has('house_id')) {
+            $query->whereHas('room', function ($q) use ($request) {
+                $q->where('house_id', $request->house_id);
+            });
+        }
+
         if ($request->has('room_id')) {
             $query->where('room_id', $request->room_id);
         }
@@ -202,7 +208,7 @@ class ContractController extends BaseController
             return $this->sendError('Unauthorized.', [], 401);
         }
 
-        $contract = Contract::with(['room', 'creator', 'users', 'updater'])->find($id);
+        $contract = Contract::with(['room.house', 'creator', 'users', 'updater'])->find($id);
 
         if (is_null($contract)) {
             return $this->sendError('Contract not found.', [], 404);
@@ -271,7 +277,7 @@ class ContractController extends BaseController
         try {
             DB::beginTransaction();
 
-            $input = $request->except('user_ids');
+            $input = $request->except(['user_ids', 'created_by']);
             $input['updated_by'] = $currentUser->id;
 
             $oldStatus = $contract->status;
@@ -403,26 +409,10 @@ class ContractController extends BaseController
             $query->where('code', 'tenant');
         });
         
-        // Nếu đang chỉnh sửa hợp đồng, include những người thuê trong hợp đồng đó
-        if ($request->has('exclude_contract_id')) {
-            $contractId = $request->exclude_contract_id;
-            
-            $query->where(function($q) use ($contractId) {
-                $q->whereDoesntHave('contracts', function($q1) {
-                    // Người không có hợp đồng active nào
-                    $q1->where('status', 'active');
-                })
-                ->orWhereHas('contracts', function($q2) use ($contractId) {
-                    // Hoặc người thuộc hợp đồng đang chỉnh sửa
-                    $q2->where('contracts.id', $contractId);
-                });
-            });
-        } else {
-            // Nếu đang tạo mới, chỉ lấy người chưa có hợp đồng active
-            $query->whereDoesntHave('contracts', function($query) {
-                $query->where('status', 'active');
-            });
-        }
+        // Chỉ lấy người không có hợp đồng active
+        $query->whereDoesntHave('contracts', function($query) {
+            $query->where('status', 'active');
+        });
         
         // Lấy danh sách người thuê
         $tenants = $query->with('role')->get();

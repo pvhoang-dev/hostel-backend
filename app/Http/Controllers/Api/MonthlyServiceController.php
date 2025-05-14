@@ -6,7 +6,6 @@ use App\Http\Controllers\Api\BaseController as BaseController;
 use App\Models\House;
 use App\Models\Room;
 use App\Models\RoomService;
-use App\Models\Service;
 use App\Models\ServiceUsage;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
@@ -71,7 +70,7 @@ class MonthlyServiceController extends BaseController
 
         // Add a flag indicating if the room needs updates 
         $roomsWithNeedUpdateFlag = $roomsWithServices->map(function ($room) use ($month, $year) {
-            $needsUpdate = false;
+            $needsUpdate = true;
             
             // Room needs update if any of its services don't have usage records for this month/year
             foreach ($room->services as $roomService) {
@@ -81,8 +80,8 @@ class MonthlyServiceController extends BaseController
                         ->where('year', $year)
                         ->exists();
 
-                    if (!$hasUsage) {
-                        $needsUpdate = true;
+                    if ($hasUsage) {
+                        $needsUpdate = false;
                         break;
                     }
                 }
@@ -140,6 +139,13 @@ class MonthlyServiceController extends BaseController
         $month = $request->month;
         $year = $request->year;
 
+        // Kiểm tra xem đã có hóa đơn cho phòng này trong tháng/năm này hay chưa
+        $existingInvoice = Invoice::where('room_id', $roomId)
+            ->where('month', $month)
+            ->where('year', $year)
+            ->where('invoice_type', 'service_usage')
+            ->first();
+
         // Get previous month/year for meter reading comparisons
         $prevMonth = $month - 1;
         $prevYear = $year;
@@ -194,7 +200,9 @@ class MonthlyServiceController extends BaseController
             'room' => $room,
             'services' => $result,
             'month' => $month,
-            'year' => $year
+            'year' => $year,
+            'has_invoice' => $existingInvoice !== null, // Thêm thông tin về việc có hóa đơn tồn tại hay không
+            'invoice_id' => $existingInvoice ? $existingInvoice->id : null // Thêm ID của hóa đơn nếu có
         ], 'Room services retrieved successfully.');
     }
 
@@ -215,6 +223,9 @@ class MonthlyServiceController extends BaseController
             'services.*.end_meter' => 'sometimes|nullable|numeric|min:0',
             'services.*.usage_value' => 'required|numeric|min:0',
             'services.*.price_used' => 'required|integer|min:0',
+            'update_invoice' => 'sometimes|boolean', // Thêm tham số update_invoice
+            'unchecked_services' => 'sometimes|array', // Thêm tham số unchecked_services
+            'unchecked_services.*' => 'sometimes|exists:room_services,id', // Các ID hợp lệ
         ]);
 
         if ($validator->fails()) {
@@ -225,6 +236,7 @@ class MonthlyServiceController extends BaseController
         $month = $request->month;
         $year = $request->year;
         $services = $request->services;
+        $updateInvoice = $request->has('update_invoice') ? (bool)$request->update_invoice : true; // Mặc định là true
 
         $room = Room::with('house')->findOrFail($roomId);
 
@@ -238,11 +250,67 @@ class MonthlyServiceController extends BaseController
             return $this->sendError('Unauthorized', ['error' => 'You do not have permission to update services'], 403);
         }
 
+        // Kiểm tra xem đã có hóa đơn cho phòng này trong tháng này chưa
+        $existingInvoice = Invoice::where('room_id', $roomId)
+            ->where('month', $month)
+            ->where('year', $year)
+            ->first();
+
         // Begin transaction
         DB::beginTransaction();
         try {
             $savedServices = [];
             $totalAmount = 0;
+
+            // Xử lý các dịch vụ bị bỏ chọn - xóa service_usage tương ứng
+            if (isset($request->unchecked_services) && is_array($request->unchecked_services)) {
+                \Illuminate\Support\Facades\Log::info('Processing unchecked services:', [
+                    'unchecked_count' => count($request->unchecked_services),
+                    'unchecked_services' => $request->unchecked_services
+                ]);
+                
+                foreach ($request->unchecked_services as $roomServiceId) {
+                    // Xác minh room_service_id thuộc về phòng này
+                    $roomService = RoomService::where('id', $roomServiceId)
+                        ->where('room_id', $roomId)
+                        ->first();
+                    
+                    if ($roomService) {
+                        // Xóa service usage cho dịch vụ bị bỏ chọn
+                        $deletedServiceUsage = ServiceUsage::where('room_service_id', $roomServiceId)
+                            ->where('month', $month)
+                            ->where('year', $year)
+                            ->first();
+                        
+                        if ($deletedServiceUsage) {
+                            // Tìm và xóa invoice_item liên quan nếu có invoice
+                            if ($existingInvoice && $updateInvoice) {
+                                $deletedInvoiceItems = InvoiceItem::where('invoice_id', $existingInvoice->id)
+                                    ->where('source_type', 'service_usage')
+                                    ->where('service_usage_id', $deletedServiceUsage->id)
+                                    ->delete();
+                                    
+                                \Illuminate\Support\Facades\Log::info("Deleted invoice items for unchecked service:", [
+                                    'service_usage_id' => $deletedServiceUsage->id,
+                                    'deleted_count' => $deletedInvoiceItems
+                                ]);
+                            }
+                            
+                            // Xóa service_usage
+                            $deletedServiceUsage->delete();
+                            
+                            \Illuminate\Support\Facades\Log::info("Deleted service usage for unchecked service:", [
+                                'room_service_id' => $roomServiceId,
+                                'service_usage_id' => $deletedServiceUsage->id
+                            ]);
+                        } else {
+                            \Illuminate\Support\Facades\Log::info("No service usage found to delete:", [
+                                'room_service_id' => $roomServiceId
+                            ]);
+                        }
+                    }
+                }
+            }
 
             foreach ($services as $serviceData) {
                 $roomServiceId = $serviceData['room_service_id'];
@@ -263,73 +331,159 @@ class MonthlyServiceController extends BaseController
                     }
                 }
 
-                // Create or update service usage
-                $serviceUsage = ServiceUsage::updateOrCreate(
-                    [
-                        'room_service_id' => $roomServiceId,
+                // Chỉ lưu các dịch vụ có usage_value > 0
+                if ($serviceData['usage_value'] > 0) {
+                    // Create or update service usage
+                    $serviceUsage = ServiceUsage::updateOrCreate(
+                        [
+                            'room_service_id' => $roomServiceId,
+                            'month' => $month,
+                            'year' => $year,
+                        ],
+                        [
+                            'start_meter' => $serviceData['start_meter'] ?? null,
+                            'end_meter' => $serviceData['end_meter'] ?? null,
+                            'usage_value' => $serviceData['usage_value'],
+                            'price_used' => $serviceData['price_used'],
+                            'description' => $serviceData['description'] ?? null,
+                        ]
+                    );
+
+                    // Tính tổng tiền cho hóa đơn
+                    $totalAmount += $serviceData['price_used'];
+                    
+                    $savedServices[] = $serviceUsage;
+                } else {
+                    // Nếu usage_value = 0, xóa service usage nếu có
+                    ServiceUsage::where('room_service_id', $roomServiceId)
+                        ->where('month', $month)
+                        ->where('year', $year)
+                        ->delete();
+                }
+            }
+
+            $invoice = null;
+            $transaction = null;
+
+            // Xử lý hóa đơn - nếu đã tồn tại và chọn cập nhật hoặc chưa tồn tại
+            if ((!$existingInvoice) || ($existingInvoice && $updateInvoice)) {
+                \Illuminate\Support\Facades\Log::info('Monthly service processing invoice:', [
+                    'room_id' => $roomId,
+                    'month' => $month,
+                    'year' => $year,
+                    'existing_invoice' => $existingInvoice ? $existingInvoice->id : 'none',
+                    'update_invoice' => $updateInvoice,
+                    'total_amount' => $totalAmount,
+                    'saved_services_count' => count($savedServices)
+                ]);
+                
+                if ($existingInvoice) {
+                    // Cập nhật hóa đơn hiện có
+                    $invoice = $existingInvoice;
+                    
+                    // Xóa chỉ các invoice item liên quan đến service_usage
+                    InvoiceItem::where('invoice_id', $invoice->id)
+                        ->where('source_type', 'service_usage')
+                        ->delete();
+                    
+                    // Tính lại tổng tiền bao gồm các manual item hiện có
+                    $manualItemsTotal = InvoiceItem::where('invoice_id', $invoice->id)
+                        ->where('source_type', '!=', 'service_usage')
+                        ->sum('amount');
+                    
+                    $invoice->total_amount = $totalAmount + $manualItemsTotal;
+                    $invoice->updated_by = $user->id;
+                    $invoice->save();
+                } else {
+                    // Tạo hóa đơn mới
+                    $invoice = Invoice::create([
+                        'room_id' => $roomId,
+                        'invoice_type' => 'service_usage',
+                        'total_amount' => $totalAmount,
                         'month' => $month,
                         'year' => $year,
-                    ],
-                    [
-                        'start_meter' => $serviceData['start_meter'] ?? null,
-                        'end_meter' => $serviceData['end_meter'] ?? null,
-                        'usage_value' => $serviceData['usage_value'],
-                        'price_used' => $serviceData['price_used'],
-                        'description' => $serviceData['description'] ?? null,
-                    ]
-                );
+                        'description' => "Hóa đơn dịch vụ tháng $month/$year",
+                        'created_by' => $user->id,
+                        'updated_by' => $user->id,
+                    ]);
+                }
 
-                // Tính tổng tiền cho hóa đơn
-                $amount = $serviceData['usage_value'] * $serviceData['price_used'];
-                $totalAmount += $amount;
+                // Tạo các invoice_item tương ứng với các dịch vụ
+                foreach ($savedServices as $serviceUsage) {
+                    $roomService = RoomService::with('service')->find($serviceUsage->room_service_id);
+                    
+                    if ($serviceUsage->usage_value > 0) {
+                        InvoiceItem::create([
+                            'invoice_id' => $invoice->id,
+                            'source_type' => 'service_usage',
+                            'service_usage_id' => $serviceUsage->id,
+                            'amount' => $serviceUsage->price_used,
+                            'description' => "Phí dịch vụ {$roomService->service->name} tháng $month/$year",
+                        ]);
+                    }
+                }
+                
+                // Cập nhật lại tổng tiền hóa đơn sau khi tất cả các dịch vụ đã được xử lý
+                if ($invoice) {
+                    // Tính lại tổng tiền từ tất cả các invoice_item
+                    $recalculatedTotal = InvoiceItem::where('invoice_id', $invoice->id)->sum('amount');
+                    
+                    // Cập nhật tổng tiền
+                    $invoice->total_amount = $recalculatedTotal;
+                    $invoice->save();
+                    
+                    \Illuminate\Support\Facades\Log::info("Recalculated invoice total amount:", [
+                        'invoice_id' => $invoice->id,
+                        'previous_total' => $invoice->total_amount,
+                        'new_total' => $recalculatedTotal,
+                        'item_count' => InvoiceItem::where('invoice_id', $invoice->id)->count()
+                    ]);
+                }
 
-                $savedServices[] = $serviceUsage;
-            }
-
-            // Tự động tạo hóa đơn cho dịch vụ hàng tháng
-            $invoice = Invoice::create([
-                'room_id' => $roomId,
-                'invoice_type' => 'service_usage',
-                'total_amount' => $totalAmount,
-                'month' => $month,
-                'year' => $year,
-                'description' => "Hóa đơn dịch vụ tháng $month/$year",
-                'created_by' => $user->id,
-                'updated_by' => $user->id,
-            ]);
-
-            // Tạo các invoice_item tương ứng với các dịch vụ
-            foreach ($savedServices as $serviceUsage) {
-                $roomService = RoomService::with('service')->find($serviceUsage->room_service_id);
-                $amount = $serviceUsage->usage_value * $serviceUsage->price_used;
-
-                $invoiceItem = InvoiceItem::create([
+                // Log thông tin về hóa đơn và các item sau khi cập nhật
+                \Illuminate\Support\Facades\Log::info('Monthly service update - Invoice items after update:', [
                     'invoice_id' => $invoice->id,
-                    'source_type' => 'service_usage',
-                    'service_usage_id' => $serviceUsage->id,
-                    'amount' => $amount,
-                    'description' => "Phí dịch vụ {$roomService->service->name} tháng $month/$year",
+                    'item_count' => InvoiceItem::where('invoice_id', $invoice->id)->count(),
+                    'manual_items' => InvoiceItem::where('invoice_id', $invoice->id)
+                        ->where('source_type', 'manual')
+                        ->get()
+                        ->toArray(),
+                    'service_items' => InvoiceItem::where('invoice_id', $invoice->id)
+                        ->where('source_type', 'service_usage')
+                        ->get()
+                        ->toArray()
                 ]);
-            }
 
-            // Tự động tạo transaction với trạng thái pending và payment_method_id = 1
-            $transaction = Transaction::create([
-                'invoice_id' => $invoice->id,
-                'payment_method_id' => 1, // ID của payment method mặc định
-                'amount' => $totalAmount,
-                'transaction_code' => 'TXN-' . Str::random(8) . '-' . time(),
-                'status' => 'pending',
-                'payment_date' => now(),
-            ]);
+                // Kiểm tra xem đã có transaction cho hóa đơn này chưa
+                $existingTransaction = Transaction::where('invoice_id', $invoice->id)->first();
+
+                if ($existingTransaction) {
+                    // Cập nhật transaction hiện có
+                    $existingTransaction->amount = $totalAmount;
+                    $existingTransaction->save();
+                    $transaction = $existingTransaction;
+                } else if (!$existingInvoice) {
+                    // Chỉ tạo transaction mới nếu là hóa đơn mới
+                    $transaction = Transaction::create([
+                        'invoice_id' => $invoice->id,
+                        'payment_method_id' => 1, // ID của payment method mặc định
+                        'amount' => $totalAmount,
+                        'transaction_code' => 'TXN-' . Str::random(8) . '-' . time(),
+                        'status' => 'pending',
+                        'payment_date' => now(),
+                    ]);
+                }
+            }
 
             DB::commit();
 
             return $this->sendResponse([
                 'saved_services' => $savedServices,
-                'invoice' => $invoice->load('items'),
+                'invoice' => $invoice ? $invoice->load('items') : null,
                 'transaction' => $transaction,
-                'count' => count($savedServices)
-            ], 'Room service usages saved and invoice generated successfully.');
+                'count' => count($savedServices),
+                'updated_invoice' => $updateInvoice && $existingInvoice !== null
+            ], 'Room service usages saved' . ($updateInvoice ? ' and invoice updated' : '') . ' successfully.');
         } catch (\Exception $e) {
             DB::rollback();
             return $this->sendError('Error saving service usages', ['error' => $e->getMessage()]);
