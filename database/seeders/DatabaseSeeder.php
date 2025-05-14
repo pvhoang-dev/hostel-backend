@@ -26,6 +26,7 @@ class DatabaseSeeder extends Seeder
             HouseSettingSeeder::class, 
             StorageSeeder::class,
             ContractSeeder::class,
+            PaymentMethodSeeder::class,
         ]);
     }
 }
