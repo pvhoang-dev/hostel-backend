@@ -51,7 +51,7 @@ class RoomSeeder extends Seeder
                 $capacity = rand(1, 4);
                 
                 // Trạng thái phòng (ưu tiên trạng thái available nhiều hơn)
-                $statusOptions = ['available', 'available', 'available', 'maintain', 'used'];
+                $statusOptions = ['available', 'available', 'available', 'maintain'];
                 $status = $statusOptions[array_rand($statusOptions)];
                 
                 // Chọn một mô tả ngẫu nhiên

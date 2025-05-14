@@ -24,6 +24,11 @@ class ContractSeeder extends Seeder
         
         // Mỗi phòng sẽ có 1-3 tenant (tùy thuộc vào sức chứa của phòng)
         foreach ($availableRooms as $room) {
+            // Random phòng sẽ không tạo hợp đồng
+            if (rand(0, 2) == 0) {
+                continue;
+            }
+
             // Xác định số lượng tenant cho phòng này (tối đa theo sức chứa, hoặc theo số tenant còn lại)
             $maxTenantsForRoom = min($room->capacity, 3); // Tối đa 3 người/phòng
             $remainingTenants = $tenants->count() - count($assignedTenants);
