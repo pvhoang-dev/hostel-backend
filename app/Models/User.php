@@ -93,6 +93,53 @@ class User extends Authenticatable
         return $this->belongsToMany(Contract::class, 'contract_users', 'user_id', 'contract_id');
     }
 
+    /**
+     * Get the room that the tenant is currently assigned to through active contract
+     */
+    public function room()
+    {
+        return $this->hasOneThrough(
+            Room::class,
+            Contract::class,
+            'id', // Khóa ngoại của bảng trung gian (contract_id trong contract_users)
+            'id', // Khóa chính của bảng đích (id trong rooms)
+            null, // Khóa local là null vì sẽ được xác định trong phương thức first()
+            'room_id' // Khóa ngoại trên bảng trung gian liên kết đến bảng đích
+        )->whereHas('contracts', function ($query) {
+            $query->whereHas('tenants', function ($q) {
+                $q->where('users.id', $this->id);
+            })->where('status', 'active');
+        })->first();
+    }
+
+    /**
+     * Get the house that the tenant is currently living in (through active contract)
+     * or the house that the manager is managing
+     */
+    public function house()
+    {
+        // Nếu là manager, lấy nhà từ quan hệ housesManaged
+        if ($this->role && $this->role->code === 'manager') {
+            return $this->housesManaged()->first();
+        }
+
+        // Nếu là tenant, lấy nhà từ phòng trong hợp đồng đang hoạt động
+        return $this->hasManyThrough(
+            House::class,
+            Room::class,
+            'id',
+            'id',
+            null,
+            'house_id'
+        )->whereHas('rooms', function ($query) {
+            $query->whereHas('contracts', function ($q) {
+                $q->whereHas('tenants', function ($q2) {
+                    $q2->where('users.id', $this->id);
+                })->where('status', 'active');
+            });
+        })->first();
+    }
+
     protected static function boot()
     {
         parent::boot();

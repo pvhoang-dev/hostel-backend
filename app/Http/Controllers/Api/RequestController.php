@@ -6,8 +6,8 @@ use App\Http\Controllers\Api\BaseController as BaseController;
 use App\Http\Resources\RequestResource;
 use App\Models\House;
 use App\Models\Request;
-use App\Models\Room;
 use App\Models\User;
+use App\Models\Notification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request as HttpRequest;
 use Illuminate\Support\Facades\Auth;
@@ -30,23 +30,25 @@ class RequestController extends BaseController
                 $q->where('sender_id', $user->id)
                     ->orWhere('recipient_id', $user->id);
             });
+            
+            // Thêm tên phòng và tên nhà vào các request cho tenant
+            if ($httpRequest->has('include_room_house') && $httpRequest->include_room_house === 'true') {
+                $query->with('room.house');
+            }
         } elseif ($user->role->code === 'manager') {
             // Managers can see requests they sent/received or from their houses
             $managedHouseIds = House::where('manager_id', $user->id)->pluck('id');
             $query->where(function ($q) use ($user, $managedHouseIds) {
                 $q->where('sender_id', $user->id)
-                    ->orWhere('recipient_id', $user->id)
-                    ->orWhereHas('room', function ($q2) use ($managedHouseIds) {
-                        $q2->whereIn('house_id', $managedHouseIds);
-                    });
+                    ->orWhere('recipient_id', $user->id);
             });
+            
+            // Thêm tên nhà vào các request cho manager
+            if ($httpRequest->has('include_house') && $httpRequest->include_house === 'true') {
+                $query->with(['sender', 'recipient']);
+            }
         }
         // Admins can see all requests, so no filter needed
-
-        // Apply additional filters
-        if ($httpRequest->has('room_id')) {
-            $query->where('room_id', $httpRequest->room_id);
-        }
 
         if ($httpRequest->has('sender_id')) {
             $query->where('sender_id', $httpRequest->sender_id);
@@ -127,7 +129,6 @@ class RequestController extends BaseController
         $input = $httpRequest->all();
 
         $validator = Validator::make($input, [
-            'room_id' => 'required|exists:rooms,id',
             'sender_id' => 'required|exists:users,id',
             'recipient_id' => 'required|exists:users,id',
             'request_type' => 'required|string|max:50',
@@ -152,50 +153,18 @@ class RequestController extends BaseController
 
         // Enforce role-based request routing
         if ($user->role->code === 'tenant') {
-            // Tenants can only send requests to managers
+            // Tenant chỉ có thể gửi cho manager quản lý nhà của họ
             if ($recipient->role->code !== 'manager') {
                 return $this->sendError('Unauthorized', ['error' => 'Tenants can only send requests to managers'], 403);
             }
-
-            // Validate room belongs to tenant
-            $hasAccess = Room::where('id', $input['room_id'])
-                ->whereHas('contracts', function ($q) use ($user) {
-                    $q->whereHas('users', function ($q2) use ($user) {
-                        $q2->where('users.id', $user->id);
-                    });
-                })
-                ->exists();
-
-            if (!$hasAccess) {
-                return $this->sendError('Unauthorized', ['error' => 'You can only create requests for your own room'], 403);
-            }
         } elseif ($user->role->code === 'manager') {
-            // Managers can send requests to admins or tenants
+            // Manager có thể gửi cho admin hoặc tenant thuộc nhà họ quản lý
             if (!in_array($recipient->role->code, ['admin', 'tenant'])) {
                 return $this->sendError('Unauthorized', ['error' => 'Managers can only send requests to admins or tenants'], 403);
             }
-
-            // If sending to tenant, ensure they belong to a house managed by this manager
-            if ($recipient->role->code === 'tenant') {
-                $managedHouseIds = House::where('manager_id', $user->id)->pluck('id');
-                $tenantBelongsToManager = Room::where('id', $input['room_id'])
-                    ->whereIn('house_id', $managedHouseIds)
-                    ->whereHas('contracts', function ($q) use ($recipient) {
-                        $q->whereHas('users', function ($q2) use ($recipient) {
-                            $q2->where('users.id', $recipient->id);
-                        });
-                    })
-                    ->exists();
-
-                if (!$tenantBelongsToManager) {
-                    return $this->sendError('Unauthorized', ['error' => 'You can only send requests to tenants in houses you manage'], 403);
-                }
-            }
         } elseif ($user->role->code === 'admin') {
-            // Admins can send requests to managers or tenants
-            if (!in_array($recipient->role->code, ['manager', 'tenant'])) {
-                return $this->sendError('Unauthorized', ['error' => 'Admins can only send requests to managers or tenants'], 403);
-            }
+            // Admin có thể gửi cho bất kỳ ai
+            // Không cần kiểm tra thêm
         } else {
             return $this->sendError('Unauthorized', ['error' => 'You are not authorized to create requests'], 403);
         }
@@ -209,9 +178,23 @@ class RequestController extends BaseController
         $input['updated_by'] = $user->id;
 
         $request = Request::create($input);
+        
+        // Tự động tạo thông báo cho người nhận khi yêu cầu được tạo
+        try {
+            Notification::create([
+                'user_id' => $recipient->id,
+                'type' => 'new_request',
+                'content' => $user->name . ' đã tạo một yêu cầu mới cho bạn',
+                'url' => '/requests/' . $request->id,
+                'status' => 'unread'
+            ]);
+        } catch (\Exception $e) {
+            // Ghi log lỗi nhưng không dừng xử lý
+            \Illuminate\Support\Facades\Log::error('Không thể tạo thông báo: ' . $e->getMessage());
+        }
 
         return $this->sendResponse(
-            new RequestResource($request->load(['room', 'sender', 'recipient', 'updater'])),
+            new RequestResource($request->load(['sender', 'recipient', 'updater'])),
             'Request created successfully.'
         );
     }
@@ -222,7 +205,7 @@ class RequestController extends BaseController
     public function show(string $id): JsonResponse
     {
         $user = Auth::user();
-        $request = Request::with(['room.house', 'sender.role', 'recipient.role', 'comments.user', 'updater'])->find($id);
+        $request = Request::with(['sender.role', 'recipient.role', 'comments.user', 'updater'])->find($id);
 
         if (is_null($request)) {
             return $this->sendError('Request not found.');
@@ -246,7 +229,7 @@ class RequestController extends BaseController
     {
         $user = Auth::user();
         $input = $httpRequest->all();
-        $request = Request::with('room.house')->find($id);
+        $request = Request::find($id);
 
         if (is_null($request)) {
             return $this->sendError('Request not found.');
@@ -259,9 +242,9 @@ class RequestController extends BaseController
 
         // Apply role-specific restrictions
         if ($user->role->code === 'tenant') {
-            // Tenants can't change room_id, sender_id, or recipient_id
-            if (isset($input['room_id']) || isset($input['sender_id']) || isset($input['recipient_id'])) {
-                return $this->sendError('Unauthorized', ['error' => 'Tenants cannot change room, sender, or recipient'], 403);
+            // Tenants can't change sender_id or recipient_id
+            if (isset($input['sender_id']) || isset($input['recipient_id'])) {
+                return $this->sendError('Unauthorized', ['error' => 'Tenants cannot change sender or recipient'], 403);
             }
 
             // Tenants can only update requests they sent
@@ -284,7 +267,6 @@ class RequestController extends BaseController
         }
 
         $validator = Validator::make($input, [
-            'room_id' => 'sometimes|exists:rooms,id',
             'sender_id' => 'sometimes|exists:users,id',
             'recipient_id' => 'sometimes|exists:users,id',
             'request_type' => 'sometimes|string|max:50',
@@ -302,7 +284,7 @@ class RequestController extends BaseController
         $request->update($input);
 
         return $this->sendResponse(
-            new RequestResource($request->load(['room', 'sender', 'recipient', 'updater'])),
+            new RequestResource($request->load(['sender', 'recipient', 'updater'])),
             'Request updated successfully.'
         );
     }
@@ -313,7 +295,7 @@ class RequestController extends BaseController
     public function destroy(string $id): JsonResponse
     {
         $user = Auth::user();
-        $request = Request::with('room.house')->find($id);
+        $request = Request::find($id);
 
         if (is_null($request)) {
             return $this->sendError('Request not found.');
@@ -324,10 +306,10 @@ class RequestController extends BaseController
             return $this->sendError('Unauthorized', ['error' => 'Tenants cannot delete requests'], 403);
         }
 
+        // Manager có thể xóa request họ gửi hoặc nhận
         if ($user->role->code === 'manager') {
-            // Check if manager manages the house
-            if ($request->room->house->manager_id !== $user->id) {
-                return $this->sendError('Unauthorized', ['error' => 'You can only delete requests for houses you manage'], 403);
+            if ($request->sender_id !== $user->id && $request->recipient_id !== $user->id) {
+                return $this->sendError('Unauthorized', ['error' => 'You can only delete requests you sent or received'], 403);
             }
         }
 
@@ -351,13 +333,9 @@ class RequestController extends BaseController
             return $user->id === $request->sender_id || $user->id === $request->recipient_id;
         }
 
-        // Managers can access requests they sent/received or from their houses
+        // Managers can access requests they sent/received
         if ($user->role->code === 'manager') {
-            if ($user->id === $request->sender_id || $user->id === $request->recipient_id) {
-                return true;
-            }
-
-            return $user->id === $request->room->house->manager_id;
+            return $user->id === $request->sender_id || $user->id === $request->recipient_id;
         }
 
         return false;
