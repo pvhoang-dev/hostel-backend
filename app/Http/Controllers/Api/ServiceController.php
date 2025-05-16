@@ -88,7 +88,7 @@ class ServiceController extends BaseController
 
         return $this->sendResponse(
             ServiceResource::collection($services)->response()->getData(true),
-            'Services retrieved successfully'
+            'Dịch vụ đã được lấy thành công.'
         );
     }
 
@@ -111,7 +111,8 @@ class ServiceController extends BaseController
             'default_price.required' => 'Giá mặc định là bắt buộc.',
             'default_price.integer' => 'Giá mặc định phải là một số nguyên.',
             'unit.required' => 'Đơn vị là bắt buộc.',
-            'unit.max' => 'Đơn vị không được vượt quá 20 ký tự.'
+            'unit.max' => 'Đơn vị không được vượt quá 20 ký tự.',
+            'is_metered.boolean' => 'Trạng thái đo lường phải là true hoặc false.'
         ]);
 
         if ($validator->fails()) {
@@ -142,7 +143,7 @@ class ServiceController extends BaseController
 
         return $this->sendResponse(
             new ServiceResource($service),
-            'Service retrieved successfully'
+            'Dịch vụ đã được lấy thành công.'
         );
     }
 
@@ -168,7 +169,8 @@ class ServiceController extends BaseController
             'default_price.required' => 'Giá mặc định là bắt buộc.',
             'default_price.integer' => 'Giá mặc định phải là một số nguyên.',
             'unit.required' => 'Đơn vị là bắt buộc.',
-            'unit.max' => 'Đơn vị không được vượt quá 20 ký tự.'
+            'unit.max' => 'Đơn vị không được vượt quá 20 ký tự.',
+            'is_metered.boolean' => 'Trạng thái đo lường phải là true hoặc false.'
         ]);
 
         if ($validator->fails()) {

@@ -90,7 +90,7 @@ class SystemSettingController extends BaseController
 
         return $this->sendResponse(
             SystemSettingResource::collection($systemSettings)->response()->getData(true),
-            'System settings retrieved successfully'
+            'Cài đặt hệ thống đã được lấy thành công'
         );
     }
 
@@ -103,6 +103,14 @@ class SystemSettingController extends BaseController
             'key' => 'required|string|max:50|unique:system_settings,key',
             'value' => 'required|string',
             'description' => 'nullable|string',
+        ], [
+            'key.required' => 'Khóa là bắt buộc.',
+            'key.string' => 'Khóa phải là một chuỗi.',
+            'key.max' => 'Khóa không được vượt quá 50 ký tự.',
+            'key.unique' => 'Khóa đã tồn tại.',
+            'value.required' => 'Giá trị là bắt buộc.',
+            'value.string' => 'Giá trị phải là một chuỗi.',
+            'description.string' => 'Mô tả phải là một chuỗi.',
         ]);
 
         if ($validator->fails()) {
@@ -116,7 +124,7 @@ class SystemSettingController extends BaseController
 
         return $this->sendResponse(
             new SystemSettingResource($systemSetting),
-            'System setting created successfully'
+            'Cài đặt hệ thống đã được tạo thành công'
         );
     }
 
@@ -128,12 +136,12 @@ class SystemSettingController extends BaseController
         $systemSetting = SystemSetting::find($id)->load(['creator', 'updater']);
 
         if (is_null($systemSetting)) {
-            return $this->sendError('System setting not found');
+            return $this->sendError('Cài đặt hệ thống không tồn tại');
         }
 
         return $this->sendResponse(
             new SystemSettingResource($systemSetting),
-            'System setting retrieved successfully'
+            'Cài đặt hệ thống đã được lấy thành công'
         );
     }
 
@@ -163,7 +171,7 @@ class SystemSettingController extends BaseController
 
         return $this->sendResponse(
             new SystemSettingResource($systemSetting),
-            'System setting updated successfully'
+            'Cài đặt hệ thống đã được cập nhật thành công'
         );
     }
 
@@ -175,11 +183,11 @@ class SystemSettingController extends BaseController
         $systemSetting = SystemSetting::find($id);
 
         if (is_null($systemSetting)) {
-            return $this->sendError('System setting not found');
+            return $this->sendError('Cài đặt hệ thống không tồn tại');
         }
 
         $systemSetting->delete();
 
-        return $this->sendResponse([], 'System setting deleted successfully');
+        return $this->sendResponse([], 'Cài đặt hệ thống đã được xóa thành công');
     }
 }

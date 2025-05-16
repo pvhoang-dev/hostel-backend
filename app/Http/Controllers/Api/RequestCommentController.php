@@ -23,17 +23,17 @@ class RequestCommentController extends BaseController
 
         // Filter by request_id (required)
         if (!$httpRequest->has('request_id')) {
-            return $this->sendError('Validation Error.', ['request_id' => 'Request ID is required']);
+            return $this->sendError('Lỗi dữ liệu.', ['request_id' => 'Request ID là bắt buộc']);
         }
 
         $request = Request::with('room.house')->find($httpRequest->request_id);
         if (!$request) {
-            return $this->sendError('Request not found.');
+            return $this->sendError('Yêu cầu không tồn tại.');
         }
 
         // Authorization check
         if (!$this->canAccessRequest($user, $request)) {
-            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to view comments for this request'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền xem bình luận cho yêu cầu này'], 403);
         }
 
         $query->where('request_id', $httpRequest->request_id);
@@ -94,7 +94,7 @@ class RequestCommentController extends BaseController
 
         return $this->sendResponse(
             RequestCommentResource::collection($comments)->response()->getData(true),
-            'Comments retrieved successfully.'
+            'Bình luận đã được lấy thành công.'
         );
     }
 
@@ -109,17 +109,22 @@ class RequestCommentController extends BaseController
         $validator = Validator::make($input, [
             'request_id' => 'required|exists:requests,id',
             'content' => 'required|string',
+        ], [
+            'request_id.required' => 'Yêu cầu là bắt buộc.',
+            'request_id.exists' => 'Yêu cầu không tồn tại.',
+            'content.required' => 'Nội dung là bắt buộc.',
+            'content.string' => 'Nội dung phải là một chuỗi.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors());
         }
 
         $request = Request::with('room.house')->find($input['request_id']);
 
         // Authorization check
         if (!$this->canAccessRequest($user, $request)) {
-            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to comment on this request'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền bình luận cho yêu cầu này'], 403);
         }
 
         // Set the user_id to current user
@@ -129,7 +134,7 @@ class RequestCommentController extends BaseController
 
         return $this->sendResponse(
             new RequestCommentResource($comment->load('user')),
-            'Comment created successfully.'
+            'Bình luận đã được tạo thành công.'
         );
     }
 
@@ -142,17 +147,17 @@ class RequestCommentController extends BaseController
         $comment = RequestComment::with('user', 'request.room.house')->find($id);
 
         if (is_null($comment)) {
-            return $this->sendError('Comment not found.');
+            return $this->sendError('Bình luận không tồn tại.');
         }
 
         // Authorization check
         if (!$this->canAccessRequest($user, $comment->request)) {
-            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to view this comment'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền xem bình luận này'], 403);
         }
 
         return $this->sendResponse(
             new RequestCommentResource($comment),
-            'Comment retrieved successfully.'
+            'Bình luận đã được lấy thành công.'
         );
     }
 
@@ -166,12 +171,12 @@ class RequestCommentController extends BaseController
         $comment = RequestComment::with('request.room.house')->find($id);
 
         if (is_null($comment)) {
-            return $this->sendError('Comment not found.');
+            return $this->sendError('Bình luận không tồn tại.');
         }
 
         // Authorization check - users can only edit their own comments
         if ($comment->user_id !== $user->id && $user->role->code !== 'admin') {
-            return $this->sendError('Unauthorized', ['error' => 'You can only edit your own comments'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể chỉnh sửa bình luận của chính mình'], 403);
         }
 
         $validator = Validator::make($input, [
@@ -179,7 +184,7 @@ class RequestCommentController extends BaseController
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors());
         }
 
         $comment->update([
@@ -188,7 +193,7 @@ class RequestCommentController extends BaseController
 
         return $this->sendResponse(
             new RequestCommentResource($comment->load('user')),
-            'Comment updated successfully.'
+            'Bình luận đã được cập nhật thành công.'
         );
     }
 
@@ -201,30 +206,30 @@ class RequestCommentController extends BaseController
         $comment = RequestComment::with('request.room.house')->find($id);
 
         if (is_null($comment)) {
-            return $this->sendError('Comment not found.');
+            return $this->sendError('Bình luận không tồn tại.');
         }
 
         // Users can delete their own comments
         if ($comment->user_id === $user->id) {
             $comment->delete();
-            return $this->sendResponse([], 'Comment deleted successfully.');
+            return $this->sendResponse([], 'Bình luận đã được xóa thành công.');
         }
 
         // Admins can delete any comment
         if ($user->role->code === 'admin') {
             $comment->delete();
-            return $this->sendResponse([], 'Comment deleted successfully.');
+            return $this->sendResponse([], 'Bình luận đã được xóa thành công.');
         }
 
         // Managers can delete comments on requests from their houses
         if ($user->role->code === 'manager') {
             if ($user->id === $comment->request->room->house->manager_id) {
                 $comment->delete();
-                return $this->sendResponse([], 'Comment deleted successfully.');
+                return $this->sendResponse([], 'Bình luận đã được xóa thành công.');
             }
         }
 
-        return $this->sendError('Unauthorized', ['error' => 'You do not have permission to delete this comment'], 403);
+        return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền xóa bình luận này'], 403);
     }
 
     /**

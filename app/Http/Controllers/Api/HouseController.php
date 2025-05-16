@@ -22,7 +22,7 @@ class HouseController extends BaseController
     {
         $user = Auth::user();
         if (!$user) {
-            return $this->sendError('Unauthorized', ['error' => 'Bạn cần đăng nhập để thực hiện thao tác này'], 401);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn cần đăng nhập để thực hiện thao tác này'], 401);
         }
 
         // Khởi tạo query
@@ -50,7 +50,7 @@ class HouseController extends BaseController
                 // Nếu không có nhà nào, trả về kết quả rỗng
                 return $this->sendResponse(
                     ['data' => [], 'meta' => ['current_page' => 1, 'last_page' => 1, 'total' => 0, 'per_page' => 15]],
-                    'No houses found for this tenant.'
+                    'Không tìm thấy nhà trọ cho bạn.'
                 );
             }
             
@@ -127,7 +127,7 @@ class HouseController extends BaseController
 
         return $this->sendResponse(
             HouseResource::collection($houses)->response()->getData(true),
-            'Houses retrieved successfully.'
+            'Lấy danh sách nhà trọ thành công.'
         );
     }
 
@@ -141,12 +141,12 @@ class HouseController extends BaseController
     {
         $currentUser = Auth::user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized', ['error' => 'Bạn cần đăng nhập để thực hiện thao tác này'], 401);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn cần đăng nhập để thực hiện thao tác này'], 401);
         }
 
         // Already checks for admin only
         if ($currentUser->role->code !== 'admin') {
-            return $this->sendError('Forbidden', ['error' => 'Chỉ quản trị viên mới có thể tạo nhà trọ mới'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Chỉ quản trị viên mới có thể tạo nhà trọ mới'], 403);
         }
 
         $input = $request->all();
@@ -156,10 +156,20 @@ class HouseController extends BaseController
             'manager_id' => 'nullable|exists:users,id',
             'status' => 'sometimes|string',
             'description' => 'nullable|string',
+        ], [
+            'name.required' => 'Tên nhà trọ là bắt buộc.',
+            'name.string' => 'Tên nhà trọ phải là chuỗi.',
+            'name.max' => 'Tên nhà trọ không được vượt quá 100 ký tự.',
+            'address.required' => 'Địa chỉ nhà trọ là bắt buộc.',
+            'address.string' => 'Địa chỉ nhà trọ phải là chuỗi.',
+            'address.max' => 'Địa chỉ nhà trọ không được vượt quá 255 ký tự.',
+            'manager_id.exists' => 'Quản lý không tồn tại.',
+            'status.string' => 'Trạng thái phải là chuỗi.',
+            'description.string' => 'Mô tả phải là chuỗi.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors(), 422);
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors(), 422);
         }
 
         if (empty($input['manager_id'])) {
@@ -185,7 +195,7 @@ class HouseController extends BaseController
     {
         $user = Auth::user();
         if (!$user) {
-            return $this->sendError('Unauthorized', ['error' => 'Bạn cần đăng nhập để thực hiện thao tác này'], 401);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn cần đăng nhập để thực hiện thao tác này'], 401);
         }
 
         $house = House::with(['manager', 'updater'])->find($id);
@@ -209,11 +219,11 @@ class HouseController extends BaseController
                 ->exists();
                 
             if (!$hasAccess) {
-                return $this->sendError('Forbidden', ['error' => 'Bạn không có quyền xem thông tin nhà trọ này'], 403);
+                return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền xem thông tin nhà trọ này'], 403);
             }
         } elseif ($user->role->code === 'manager' && $house->manager_id !== $user->id) {
             // Manager chỉ được xem nhà họ quản lý
-            return $this->sendError('Forbidden', ['error' => 'Bạn không có quyền xem thông tin nhà trọ này'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền xem thông tin nhà trọ này'], 403);
         }
 
         return $this->sendResponse(new HouseResource($house), 'Lấy thông tin nhà trọ thành công.');
@@ -230,12 +240,12 @@ class HouseController extends BaseController
     {
         $currentUser = Auth::user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized', ['error' => 'Bạn cần đăng nhập để thực hiện thao tác này'], 401);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn cần đăng nhập để thực hiện thao tác này'], 401);
         }
 
         // Check if user is admin or manager
         if (!in_array($currentUser->role->code, ['admin', 'manager'])) {
-            return $this->sendError('Forbidden', ['error' => 'Chỉ quản trị viên hoặc quản lý mới có quyền cập nhật nhà trọ'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Chỉ quản trị viên hoặc quản lý mới có quyền cập nhật nhà trọ'], 403);
         }
 
         $house = House::find($id);
@@ -249,7 +259,7 @@ class HouseController extends BaseController
         $isManager = $currentUser->role->code === 'manager' && $house->manager_id === $currentUser->id;
 
         if (!$isAdmin && !$isManager) {
-            return $this->sendError('Forbidden', ['error' => 'Bạn không có quyền cập nhật nhà trọ này'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền cập nhật nhà trọ này'], 403);
         }
 
         // Determine which fields can be updated based on role
@@ -263,10 +273,20 @@ class HouseController extends BaseController
             'manager_id' => $isAdmin ? 'sometimes|nullable|exists:users,id' : '',
             'status' => 'sometimes|string',
             'description' => 'sometimes|nullable|string',
+        ], [
+            'name.required' => 'Tên nhà trọ là bắt buộc.',
+            'name.string' => 'Tên nhà trọ phải là chuỗi.',
+            'name.max' => 'Tên nhà trọ không được vượt quá 100 ký tự.',
+            'address.required' => 'Địa chỉ nhà trọ là bắt buộc.',
+            'address.string' => 'Địa chỉ nhà trọ phải là chuỗi.',
+            'address.max' => 'Địa chỉ nhà trọ không được vượt quá 255 ký tự.',
+            'manager_id.exists' => 'Quản lý không tồn tại.',
+            'status.string' => 'Trạng thái phải là chuỗi.',
+            'description.string' => 'Mô tả phải là chuỗi.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors(), 422);
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors(), 422);
         }
 
         // Filter request data based on allowed fields
@@ -295,12 +315,12 @@ class HouseController extends BaseController
     {
         $currentUser = Auth::user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized', ['error' => 'Bạn cần đăng nhập để thực hiện thao tác này'], 401);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn cần đăng nhập để thực hiện thao tác này'], 401);
         }
 
         // Already checks for admin only
         if ($currentUser->role->code !== 'admin') {
-            return $this->sendError('Forbidden', ['error' => 'Chỉ quản trị viên mới có thể xóa nhà trọ'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Chỉ quản trị viên mới có thể xóa nhà trọ'], 403);
         }
 
         $house = House::find($id);

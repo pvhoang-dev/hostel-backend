@@ -112,7 +112,7 @@ class RoomServiceController extends BaseController
 
         return $this->sendResponse(
             RoomServiceResource::collection($roomServices)->response()->getData(true),
-            'Room services retrieved successfully.'
+            'Dịch vụ phòng đã được lấy thành công.'
         );
     }
 
@@ -131,23 +131,37 @@ class RoomServiceController extends BaseController
             'is_fixed' => 'required|boolean',
             'status' => 'sometimes|string|max:20',
             'description' => 'nullable|string',
+        ], [
+            'room_id.required' => 'Mã phòng không được để trống.',
+            'room_id.exists' => 'Mã phòng không tồn tại.',
+            'service_id.required' => 'Mã dịch vụ không được để trống.',
+            'service_id.exists' => 'Mã dịch vụ không tồn tại.',
+            'price.required' => 'Giá không được để trống.',
+            'price.integer' => 'Giá phải là một số nguyên.',
+            'price.min' => 'Giá phải lớn hơn 0.',
+            'is_fixed.required' => 'Trạng thái cố định không được để trống.',
+            'is_fixed.boolean' => 'Trạng thái cố định phải là true hoặc false.',
+            'status.string' => 'Trạng thái phải là một chuỗi.',
+            'status.max' => 'Trạng thái không được vượt quá 20 ký tự.',
+            'description.string' => 'Mô tả phải là một chuỗi.',
         ]);
 
+
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors());
         }
 
         // Check authorization
         $room = Room::with('house')->find($input['room_id']);
         if (!$room) {
-            return $this->sendError('Room not found.');
+            return $this->sendError('Phòng không tồn tại.');
         }
 
         // Only managers of the house or admins can add services to rooms
         if ($user->role->code === 'tenant') {
-            return $this->sendError('Unauthorized', ['error' => 'Tenants cannot add services to rooms'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Tenants không thể thêm dịch vụ vào phòng'], 403);
         } elseif ($user->role->code === 'manager' && $room->house->manager_id !== $user->id) {
-            return $this->sendError('Unauthorized', ['error' => 'You can only add services to rooms in houses you manage'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể thêm dịch vụ vào phòng trong nhà mà bạn quản lý'], 403);
         }
 
         // Check if the service already exists for this room
@@ -156,7 +170,7 @@ class RoomServiceController extends BaseController
             ->first();
 
         if ($existingService) {
-            return $this->sendError('Validation Error.', ['service' => 'This service is already assigned to the room']);
+            return $this->sendError('Lỗi dữ liệu.', ['service' => 'Dịch vụ này đã được gán cho phòng']);
         }
 
         // Set default status if not provided
@@ -168,7 +182,7 @@ class RoomServiceController extends BaseController
 
         return $this->sendResponse(
             new RoomServiceResource($roomService->load(['room.house', 'service'])),
-            'Room service created successfully.'
+            'Dịch vụ phòng đã được tạo thành công.'
         );
     }
 
@@ -181,17 +195,17 @@ class RoomServiceController extends BaseController
         $roomService = RoomService::with(['room.house', 'service'])->find($id);
 
         if (is_null($roomService)) {
-            return $this->sendError('Room service not found.');
+            return $this->sendError('Dịch vụ phòng không tồn tại.');
         }
 
         // Authorization check
         if (!$this->canAccessRoomService($user, $roomService)) {
-            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to view this room service'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền xem dịch vụ phòng này'], 403);
         }
 
         return $this->sendResponse(
             new RoomServiceResource($roomService),
-            'Room service retrieved successfully.'
+            'Dịch vụ phòng đã được lấy thành công.'
         );
     }
 
@@ -205,12 +219,12 @@ class RoomServiceController extends BaseController
         $roomService = RoomService::with('room.house')->find($id);
 
         if (is_null($roomService)) {
-            return $this->sendError('Room service not found.');
+            return $this->sendError('Dịch vụ phòng không tồn tại.');
         }
 
         // Authorization check
         if (!$this->canManageRoomService($user, $roomService)) {
-            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to update this room service'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền cập nhật dịch vụ phòng này'], 403);
         }
 
         $validator = Validator::make($input, [
@@ -218,17 +232,24 @@ class RoomServiceController extends BaseController
             'is_fixed' => 'sometimes|boolean',
             'status' => 'sometimes|string|max:20',
             'description' => 'sometimes|nullable|string',
+        ], [
+            'price.integer' => 'Giá phải là một số nguyên.',
+            'price.min' => 'Giá phải lớn hơn 0.',
+            'is_fixed.boolean' => 'Trạng thái cố định phải là true hoặc false.',
+            'status.string' => 'Trạng thái phải là một chuỗi.',
+            'status.max' => 'Trạng thái không được vượt quá 20 ký tự.',
+            'description.string' => 'Mô tả phải là một chuỗi.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors());
         }
 
         $roomService->update($input);
 
         return $this->sendResponse(
             new RoomServiceResource($roomService->load(['room.house', 'service'])),
-            'Room service updated successfully.'
+            'Dịch vụ phòng đã được cập nhật thành công.'
         );
     }
 
@@ -241,17 +262,17 @@ class RoomServiceController extends BaseController
         $roomService = RoomService::with('room.house')->find($id);
 
         if (is_null($roomService)) {
-            return $this->sendError('Room service not found.');
+            return $this->sendError('Dịch vụ phòng không tồn tại.');
         }
 
         // Authorization check - only admins and managers can delete room services
         if (!$this->canManageRoomService($user, $roomService)) {
-            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to delete this room service'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền xóa dịch vụ phòng này'], 403);
         }
 
         $roomService->delete();
 
-        return $this->sendResponse([], 'Room service deleted successfully.');
+        return $this->sendResponse([], 'Dịch vụ phòng đã được xóa thành công.');
     }
 
     /**

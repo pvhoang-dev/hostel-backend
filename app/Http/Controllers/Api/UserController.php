@@ -102,12 +102,6 @@ class UserController extends BaseController
                 ->whereHas('housesManaged', function ($houseQuery) use ($houseIds) {
                     $houseQuery->whereIn('id', $houseIds);
                 });
-                
-                // Debug log nếu cần thiết
-                \Illuminate\Support\Facades\Log::info('Tenant looking for managers', [
-                    'tenant_id' => $currentUser->id,
-                    'house_ids' => $houseIds
-                ]);
             } else {
                 // Other users (tenants) can only see their own profile
                 $query->where('id', $currentUser->id);
@@ -466,9 +460,12 @@ class UserController extends BaseController
             'notification_preferences',
         ]));
 
+        if ($input['password']) {
+            $user->password = Hash::make($input['password']);
+        }
         $user->save();
 
-        return $this->sendResponse(new UserResource($user), 'User updated successfully.');
+        return $this->sendResponse(new UserResource($user), 'Cập nhật người dùng thành công.');
     }
 
     /**

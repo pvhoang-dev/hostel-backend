@@ -134,39 +134,51 @@ class RequestController extends BaseController
             'request_type' => 'required|string|max:50',
             'description' => 'required|string',
             'status' => 'sometimes|string|max:20',
+        ], [
+            'sender_id.required' => 'ID người gửi là bắt buộc.',
+            'sender_id.exists' => 'Người gửi không tồn tại.',
+            'recipient_id.required' => 'ID người nhận là bắt buộc.',
+            'recipient_id.exists' => 'Người nhận không tồn tại.',
+            'request_type.required' => 'Loại yêu cầu là bắt buộc.',
+            'request_type.string' => 'Loại yêu cầu phải là một chuỗi.',
+            'request_type.max' => 'Loại yêu cầu không được vượt quá 50 ký tự.',
+            'description.required' => 'Nội dung là bắt buộc.',
+            'description.string' => 'Nội dung phải là một chuỗi.',
+            'status.string' => 'Trạng thái phải là một chuỗi.',
+            'status.max' => 'Trạng thái không được vượt quá 20 ký tự.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors());
         }
 
         // Users can only create requests where they are the sender
         if ($user->id !== $input['sender_id']) {
-            return $this->sendError('Unauthorized', ['error' => 'You can only create requests as the sender'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể tạo yêu cầu là người gửi'], 403);
         }
 
         // Check role-based routing permissions
         $recipient = User::find($input['recipient_id']);
         if (!$recipient) {
-            return $this->sendError('Validation Error.', ['recipient_id' => 'Recipient not found']);
+            return $this->sendError('Lỗi dữ liệu.', ['recipient_id' => 'Người nhận không tồn tại']);
         }
 
         // Enforce role-based request routing
         if ($user->role->code === 'tenant') {
             // Tenant chỉ có thể gửi cho manager quản lý nhà của họ
             if ($recipient->role->code !== 'manager') {
-                return $this->sendError('Unauthorized', ['error' => 'Tenants can only send requests to managers'], 403);
+                return $this->sendError('Lỗi xác thực.', ['error' => 'Tenants can only send requests to managers'], 403);
             }
         } elseif ($user->role->code === 'manager') {
             // Manager có thể gửi cho admin hoặc tenant thuộc nhà họ quản lý
             if (!in_array($recipient->role->code, ['admin', 'tenant'])) {
-                return $this->sendError('Unauthorized', ['error' => 'Managers can only send requests to admins or tenants'], 403);
+                return $this->sendError('Lỗi xác thực.', ['error' => 'Managers can only send requests to admins or tenants'], 403);
             }
         } elseif ($user->role->code === 'admin') {
             // Admin có thể gửi cho bất kỳ ai
             // Không cần kiểm tra thêm
         } else {
-            return $this->sendError('Unauthorized', ['error' => 'You are not authorized to create requests'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền tạo yêu cầu'], 403);
         }
 
         // If no status is provided, set it to 'pending'
@@ -190,12 +202,11 @@ class RequestController extends BaseController
             ]);
         } catch (\Exception $e) {
             // Ghi log lỗi nhưng không dừng xử lý
-            \Illuminate\Support\Facades\Log::error('Không thể tạo thông báo: ' . $e->getMessage());
         }
 
         return $this->sendResponse(
             new RequestResource($request->load(['sender', 'recipient', 'updater'])),
-            'Request created successfully.'
+            'Tạo yêu cầu thành công.'
         );
     }
 
@@ -208,17 +219,17 @@ class RequestController extends BaseController
         $request = Request::with(['sender.role', 'recipient.role', 'comments.user', 'updater'])->find($id);
 
         if (is_null($request)) {
-            return $this->sendError('Request not found.');
+            return $this->sendError('Yêu cầu không tồn tại.');
         }
 
         // Authorization check
         if (!$this->canAccessRequest($user, $request)) {
-            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to view this request'], 403);
+            return $this->sendError('Bạn không có quyền xem yêu cầu này', ['error' => 'Bạn không có quyền xem yêu cầu này'], 403);
         }
 
         return $this->sendResponse(
             new RequestResource($request),
-            'Request retrieved successfully.'
+            'Yêu cầu đã được lấy thành công.'
         );
     }
 
@@ -232,36 +243,36 @@ class RequestController extends BaseController
         $request = Request::find($id);
 
         if (is_null($request)) {
-            return $this->sendError('Request not found.');
+            return $this->sendError('Yêu cầu không tồn tại.');
         }
 
         // Authorization check
         if (!$this->canAccessRequest($user, $request)) {
-            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to update this request'], 403);
+            return $this->sendError('Bạn không có quyền cập nhật yêu cầu này', ['error' => 'Bạn không có quyền cập nhật yêu cầu này'], 403);
         }
 
         // Apply role-specific restrictions
         if ($user->role->code === 'tenant') {
             // Tenants can't change sender_id or recipient_id
             if (isset($input['sender_id']) || isset($input['recipient_id'])) {
-                return $this->sendError('Unauthorized', ['error' => 'Tenants cannot change sender or recipient'], 403);
+                return $this->sendError('Lỗi xác thực.', ['error' => 'Tenants cannot change sender or recipient'], 403);
             }
 
             // Tenants can only update requests they sent
             if ($request->sender_id !== $user->id) {
-                return $this->sendError('Unauthorized', ['error' => 'You can only update requests you sent'], 403);
+                return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể cập nhật yêu cầu mà bạn gửi'], 403);
             }
 
             // Tenants can only update description, not status
             if (isset($input['status'])) {
-                return $this->sendError('Unauthorized', ['error' => 'Tenants cannot change request status'], 403);
+                return $this->sendError('Lỗi xác thực.', ['error' => 'Tenants cannot change request status'], 403);
             }
         } elseif ($user->role->code === 'manager') {
             // Managers can update recipient_id only to admin users
             if (isset($input['recipient_id'])) {
                 $recipient = User::find($input['recipient_id']);
                 if (!$recipient || $recipient->role->code !== 'admin') {
-                    return $this->sendError('Unauthorized', ['error' => 'Managers can only change recipient to admin users'], 403);
+                    return $this->sendError('Lỗi xác thực.', ['error' => 'Managers can only change recipient to admin users'], 403);
                 }
             }
         }
@@ -272,10 +283,18 @@ class RequestController extends BaseController
             'request_type' => 'sometimes|string|max:50',
             'description' => 'sometimes|string',
             'status' => 'sometimes|string|max:20',
+        ], [
+            'sender_id.exists' => 'Người gửi không tồn tại.',
+            'recipient_id.exists' => 'Người nhận không tồn tại.',
+            'request_type.string' => 'Loại yêu cầu phải là một chuỗi.',
+            'request_type.max' => 'Loại yêu cầu không được vượt quá 50 ký tự.',
+            'description.string' => 'Nội dung phải là một chuỗi.',
+            'status.string' => 'Trạng thái phải là một chuỗi.',
+            'status.max' => 'Trạng thái không được vượt quá 20 ký tự.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors());
         }
 
         // Set updated_by to current user
@@ -285,7 +304,7 @@ class RequestController extends BaseController
 
         return $this->sendResponse(
             new RequestResource($request->load(['sender', 'recipient', 'updater'])),
-            'Request updated successfully.'
+            'Yêu cầu đã được cập nhật thành công.'
         );
     }
 
@@ -298,24 +317,24 @@ class RequestController extends BaseController
         $request = Request::find($id);
 
         if (is_null($request)) {
-            return $this->sendError('Request not found.');
+            return $this->sendError('Yêu cầu không tồn tại.');
         }
 
         // Authorization check - only admins and managers can delete requests
         if ($user->role->code === 'tenant') {
-            return $this->sendError('Unauthorized', ['error' => 'Tenants cannot delete requests'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Tenants cannot delete requests'], 403);
         }
 
         // Manager có thể xóa request họ gửi hoặc nhận
         if ($user->role->code === 'manager') {
             if ($request->sender_id !== $user->id && $request->recipient_id !== $user->id) {
-                return $this->sendError('Unauthorized', ['error' => 'You can only delete requests you sent or received'], 403);
+                return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể xóa yêu cầu mà bạn gửi hoặc nhận'], 403);
             }
         }
 
         $request->delete();
 
-        return $this->sendResponse([], 'Request deleted successfully.');
+        return $this->sendResponse([], 'Yêu cầu đã được xóa thành công.');
     }
 
     /**

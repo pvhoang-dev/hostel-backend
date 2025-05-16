@@ -102,7 +102,7 @@ class RoomEquipmentController extends BaseController
 
         return $this->sendResponse(
             RoomEquipmentResource::collection($roomEquipments)->response()->getData(true),
-            'Room equipments retrieved successfully.'
+            'Thiết bị phòng đã được lấy thành công.'
         );
     }
 
@@ -113,7 +113,7 @@ class RoomEquipmentController extends BaseController
     {
         $currentUser = auth()->user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized.', [], 401);
+            return $this->sendError('Lỗi xác thực.', [], 401);
         }
 
         $input = $request->all();
@@ -123,30 +123,42 @@ class RoomEquipmentController extends BaseController
             'quantity' => 'required|integer|min:1',
             'price' => 'required|integer|min:0',
             'description' => 'nullable|string',
+        ], [
+            'room_id.required' => 'Mã phòng không được để trống.',
+            'room_id.exists' => 'Mã phòng không tồn tại.',
+            'equipment_id.required' => 'Mã thiết bị không được để trống.',
+            'equipment_id.exists' => 'Mã thiết bị không tồn tại.',
+            'quantity.required' => 'Số lượng không được để trống.',
+            'quantity.integer' => 'Số lượng phải là một số nguyên.',
+            'quantity.min' => 'Số lượng phải lớn hơn 0.',
+            'price.required' => 'Giá không được để trống.',
+            'price.integer' => 'Giá phải là một số nguyên.',
+            'price.min' => 'Giá phải lớn hơn 0.',
+            'description.string' => 'Mô tả phải là một chuỗi.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors(), 422);
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors(), 422);
         }
 
         // Check authorization
         $room = Room::with('house')->find($input['room_id']);
         if (!$room) {
-            return $this->sendError('Room not found.');
+            return $this->sendError('Phòng không tồn tại.');
         }
 
         $isAdmin = $currentUser->role->code === 'admin';
         $isManager = $room->house->manager_id === $currentUser->id;
 
         if (!$isAdmin && !$isManager) {
-            return $this->sendError('Unauthorized. Only admins or house managers can manage room equipments.', [], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Chỉ quản trị viên hoặc quản lý nhà mới có thể quản lý thiết bị phòng.'], 403);
         }
 
         // Create room equipment
         $roomEquipment = RoomEquipment::create($input);
         $roomEquipment->load(['room', 'equipment']);
 
-        return $this->sendResponse(new RoomEquipmentResource($roomEquipment), 'Room equipment created successfully.');
+        return $this->sendResponse(new RoomEquipmentResource($roomEquipment), 'Thiết bị phòng đã được tạo thành công.');
     }
 
     /**
@@ -157,10 +169,10 @@ class RoomEquipmentController extends BaseController
         $roomEquipment = RoomEquipment::with(['room', 'equipment'])->find($id);
 
         if (is_null($roomEquipment)) {
-            return $this->sendError('Room equipment not found.');
+            return $this->sendError('Thiết bị phòng không tồn tại.');
         }
 
-        return $this->sendResponse(new RoomEquipmentResource($roomEquipment), 'Room equipment retrieved successfully.');
+        return $this->sendResponse(new RoomEquipmentResource($roomEquipment), 'Thiết bị phòng đã được lấy thành công.');
     }
 
     /**
@@ -171,12 +183,12 @@ class RoomEquipmentController extends BaseController
         $roomEquipment = RoomEquipment::find($id);
 
         if (is_null($roomEquipment)) {
-            return $this->sendError('Room equipment not found.');
+            return $this->sendError('Thiết bị phòng không tồn tại.');
         }
 
         $currentUser = auth()->user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized.', [], 401);
+            return $this->sendError('Lỗi xác thực.', [], 401);
         }
 
         // Check authorization
@@ -185,7 +197,7 @@ class RoomEquipmentController extends BaseController
         $isManager = $room->house->manager_id === $currentUser->id;
 
         if (!$isAdmin && !$isManager) {
-            return $this->sendError('Unauthorized. Only admins or house managers can update room equipments.', [], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Chỉ quản trị viên hoặc quản lý nhà mới có thể cập nhật thiết bị phòng.'], 403);
         }
 
         $validator = Validator::make($request->all(), [
@@ -194,10 +206,18 @@ class RoomEquipmentController extends BaseController
             'quantity' => 'sometimes|integer|min:1',
             'price' => 'sometimes|integer|min:0',
             'description' => 'nullable|string',
+        ], [
+            'equipment_id.exists' => 'Mã thiết bị không tồn tại.',
+            'room_id.exists' => 'Mã phòng không tồn tại.',
+            'quantity.integer' => 'Số lượng phải là một số nguyên.',
+            'quantity.min' => 'Số lượng phải lớn hơn 0.',
+            'price.integer' => 'Giá phải là một số nguyên.',
+            'price.min' => 'Giá phải lớn hơn 0.',
+            'description.string' => 'Mô tả phải là một chuỗi.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors(), 422);
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors(), 422);
         }
 
         // If room_id is being changed, check if user has permission for the new room
@@ -205,20 +225,20 @@ class RoomEquipmentController extends BaseController
             $newRoom = Room::with('house')->find($request->room_id);
 
             if (!$newRoom) {
-                return $this->sendError('New room not found.');
+                return $this->sendError('Phòng mới không tồn tại.');
             }
 
             $isManagerOfNewRoom = $newRoom->house->manager_id === $currentUser->id;
 
             if (!$isAdmin && !$isManagerOfNewRoom) {
-                return $this->sendError('Unauthorized. You do not have permission to move equipment to this room.', [], 403);
+                return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền chuyển thiết bị sang phòng này.'], 403);
             }
         }
 
         $roomEquipment->update($request->all());
         $roomEquipment->load(['room', 'equipment']);
 
-        return $this->sendResponse(new RoomEquipmentResource($roomEquipment), 'Room equipment updated successfully.');
+        return $this->sendResponse(new RoomEquipmentResource($roomEquipment), 'Thiết bị phòng đã được cập nhật thành công.');
     }
 
     /**
@@ -229,12 +249,12 @@ class RoomEquipmentController extends BaseController
         $roomEquipment = RoomEquipment::find($id);
 
         if (is_null($roomEquipment)) {
-            return $this->sendError('Room equipment not found.');
+            return $this->sendError('Thiết bị phòng không tồn tại.');
         }
 
         $currentUser = auth()->user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized.', [], 401);
+            return $this->sendError('Lỗi xác thực.', [], 401);
         }
 
         // Check authorization
@@ -243,11 +263,11 @@ class RoomEquipmentController extends BaseController
         $isManager = $room->house->manager_id === $currentUser->id;
 
         if (!$isAdmin && !$isManager) {
-            return $this->sendError('Unauthorized. Only admins or house managers can delete room equipments.', [], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Chỉ quản trị viên hoặc quản lý nhà mới có thể xóa thiết bị phòng.'], 403);
         }
 
         $roomEquipment->delete();
 
-        return $this->sendResponse([], 'Room equipment deleted successfully.');
+        return $this->sendResponse([], 'Thiết bị phòng đã được xóa thành công.');
     }
 }

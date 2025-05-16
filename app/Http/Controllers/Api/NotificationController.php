@@ -49,7 +49,7 @@ class NotificationController extends BaseController
     {
         $currentUser = auth()->user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized.', [], 401);
+            return $this->sendError('Lỗi xác thực.', [], 401);
         }
 
         $query = Notification::query();
@@ -171,10 +171,20 @@ class NotificationController extends BaseController
             'content' => 'required|string',
             'url' => 'nullable|string',
             'is_read' => 'boolean',
+        ], [
+            'user_id.required' => 'User ID là bắt buộc.',
+            'user_id.exists' => 'User ID không hợp lệ.',
+            'type.required' => 'Loại thông báo là bắt buộc.',
+            'type.string' => 'Loại thông báo phải là chuỗi.',
+            'type.max' => 'Loại thông báo phải nhỏ hơn 50 ký tự.',
+            'content.required' => 'Nội dung thông báo là bắt buộc.',
+            'content.string' => 'Nội dung thông báo phải là chuỗi.',
+            'url.string' => 'URL phải là chuỗi.',
+            'is_read.boolean' => 'Trạng thái đã đọc phải là boolean.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors(), 422);
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors(), 422);
         }
 
         $isAdmin = $currentUser->role->code === 'admin';
@@ -183,7 +193,7 @@ class NotificationController extends BaseController
 
         // Tenants cannot create notifications
         if ($isTenant) {
-            return $this->sendError('Unauthorized. As a tenant, you can not create notifications.', [], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền tạo thông báo.'], 403);
         }
 
         // If manager, check if they can create notifications for this user
@@ -194,7 +204,7 @@ class NotificationController extends BaseController
             
             // Managers có thể tạo thông báo cho admin hoặc tenant họ quản lý
             if (!$isTargetAdmin && !$this->isTenantManagedByManager($input['user_id'], $currentUser->id)) {
-                return $this->sendError('You can only create notifications for admins or tenants you manage.', [], 403);
+                return $this->sendError('Bạn chỉ có thể tạo thông báo cho admin hoặc tenant mà bạn quản lý.', [], 403);
             }
         }
 
@@ -202,7 +212,7 @@ class NotificationController extends BaseController
 
         return $this->sendResponse(
             new NotificationResource($notification),
-            'Notification created successfully.'
+            'Thông báo đã được tạo thành công.'
         );
     }
 
@@ -213,13 +223,13 @@ class NotificationController extends BaseController
     {
         $currentUser = auth()->user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized.', [], 401);
+            return $this->sendError('Lỗi xác thực.', [], 401);
         }
 
         $notification = Notification::find($id);
 
         if (is_null($notification)) {
-            return $this->sendError('Notification not found.');
+            return $this->sendError('Thông báo không tồn tại.');
         }
 
         // Check permissions
@@ -234,12 +244,12 @@ class NotificationController extends BaseController
         // Manager can view their own notifications or notifications of tenants they manage
         else if ($isManager) {
             if (!$isOwnNotification && !$this->isTenantManagedByManager($notification->user_id, $currentUser->id)) {
-                return $this->sendError('Unauthorized. You can only view your own notifications or notifications of tenants you manage.', [], 403);
+                return $this->sendError('Bạn chỉ có thể xem thông báo của chính mình hoặc thông báo của khách trọ mà bạn quản lý.', [], 403);
             }
         }
         // Others can only view their own notifications
         else if (!$isOwnNotification) {
-            return $this->sendError('Unauthorized. You can only view your own notifications.', [], 403);
+            return $this->sendError('Bạn chỉ có thể xem thông báo của chính mình.', [], 403);
         }
 
         // Mark notification as read if the user is viewing their own notification
@@ -250,7 +260,7 @@ class NotificationController extends BaseController
 
         return $this->sendResponse(
             new NotificationResource($notification),
-            'Notification retrieved successfully.'
+            'Thông báo đã được lấy thành công.'
         );
     }
 
@@ -261,13 +271,13 @@ class NotificationController extends BaseController
     {
         $currentUser = auth()->user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized.', [], 401);
+            return $this->sendError('Lỗi xác thực.', [], 401);
         }
 
         $notification = Notification::find($id);
 
         if (is_null($notification)) {
-            return $this->sendError('Notification not found.');
+            return $this->sendError('Thông báo không tồn tại.');
         }
 
         // Check permissions
@@ -282,12 +292,12 @@ class NotificationController extends BaseController
         // Manager can update their own notifications or notifications of tenants they manage
         else if ($isManager) {
             if (!$isOwnNotification && !$this->isTenantManagedByManager($notification->user_id, $currentUser->id)) {
-                return $this->sendError('Unauthorized. You can only update your own notifications or notifications of tenants you manage.', [], 403);
+                return $this->sendError('Bạn chỉ có thể cập nhật thông báo của chính mình hoặc thông báo của khách trọ mà bạn quản lý.', [], 403);
             }
         }
         // Others can only update their own notifications
         else if (!$isOwnNotification) {
-            return $this->sendError('Unauthorized. You can only update your own notifications.', [], 403);
+            return $this->sendError('Bạn chỉ có thể cập nhật thông báo của chính mình.', [], 403);
         }
 
         $input = $request->only(['type', 'content', 'url', 'is_read']);
@@ -303,7 +313,7 @@ class NotificationController extends BaseController
                 if ($this->isTenantManagedByManager($request->user_id, $currentUser->id)) {
                     $input['user_id'] = $request->user_id;
                 } else {
-                    return $this->sendError('Unauthorized. You can only assign notifications to tenants you manage.', [], 403);
+                    return $this->sendError('Bạn chỉ có thể gán thông báo cho khách trọ mà bạn quản lý.', [], 403);
                 }
             }
             // Others cannot change user_id (not added to input)
@@ -315,10 +325,17 @@ class NotificationController extends BaseController
             'url' => 'nullable|string',
             'is_read' => 'sometimes|boolean',
             'user_id' => 'sometimes|exists:users,id',
+        ], [
+            'type.string' => 'Loại thông báo phải là chuỗi.',
+            'type.max' => 'Loại thông báo phải nhỏ hơn 50 ký tự.',
+            'content.string' => 'Nội dung thông báo phải là chuỗi.',
+            'url.string' => 'URL phải là chuỗi.',
+            'is_read.boolean' => 'Trạng thái đã đọc phải là boolean.',
+            'user_id.exists' => 'User ID không hợp lệ.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors(), 422);
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors(), 422);
         }
 
         // Update only provided fields, keeping the original user_id if not changed
@@ -326,7 +343,7 @@ class NotificationController extends BaseController
 
         return $this->sendResponse(
             new NotificationResource($notification),
-            'Notification updated successfully.'
+            'Thông báo đã được cập nhật thành công.'
         );
     }
 
@@ -337,13 +354,13 @@ class NotificationController extends BaseController
     {
         $currentUser = auth()->user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized.', [], 401);
+            return $this->sendError('Lỗi xác thực.', [], 401);
         }
 
         $notification = Notification::find($id);
 
         if (is_null($notification)) {
-            return $this->sendError('Notification not found.');
+            return $this->sendError('Thông báo không tồn tại.');
         }
 
         // Check permissions
@@ -358,17 +375,17 @@ class NotificationController extends BaseController
         // Manager can delete their own notifications or notifications of tenants they manage
         else if ($isManager) {
             if (!$isOwnNotification && !$this->isTenantManagedByManager($notification->user_id, $currentUser->id)) {
-                return $this->sendError('Unauthorized. You can only delete your own notifications or notifications of tenants you manage.', [], 403);
+                return $this->sendError('Bạn chỉ có thể xóa thông báo của chính mình hoặc thông báo của khách trọ mà bạn quản lý.', [], 403);
             }
         }
         // Others can only delete their own notifications
         else if (!$isOwnNotification) {
-            return $this->sendError('Unauthorized. You can only delete your own notifications.', [], 403);
+            return $this->sendError('Bạn chỉ có thể xóa thông báo của chính mình.', [], 403);
         }
 
         $notification->delete();
 
-        return $this->sendResponse([], 'Notification deleted successfully.');
+        return $this->sendResponse([], 'Thông báo đã được xóa thành công.');
     }
 
     /**
@@ -378,7 +395,7 @@ class NotificationController extends BaseController
     {
         $currentUser = auth()->user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized.', [], 401);
+            return $this->sendError('Lỗi xác thực.', [], 401);
         }
 
         $isAdmin = $currentUser->role->code === 'admin';
@@ -406,7 +423,7 @@ class NotificationController extends BaseController
                     ->where('is_read', false)
                     ->update(['is_read' => true]);
             } else {
-                return $this->sendError('Unauthorized. You can only mark your own notifications as read.', [], 403);
+                return $this->sendError('Bạn chỉ có thể đánh dấu thông báo của chính mình.', [], 403);
             }
         }
         // No user_id provided, mark current user's notifications as read
@@ -416,6 +433,6 @@ class NotificationController extends BaseController
                 ->update(['is_read' => true]);
         }
 
-        return $this->sendResponse([], 'All notifications marked as read.');
+        return $this->sendResponse([], 'Tất cả thông báo đã được đánh dấu đã đọc.');
     }
 }

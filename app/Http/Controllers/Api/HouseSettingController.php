@@ -138,6 +138,8 @@ class HouseSettingController extends BaseController
             'key.required' => 'Số thứ tự là bắt buộc.',
             'key.unique' => 'Số thứ tự đã tồn tại.',
             'value.required' => 'Nội quy là bắt buộc.',
+            'value.string' => 'Nội quy phải là chuỗi.',
+            'description.string' => 'Mô tả phải là chuỗi.',
         ]);
 
         if ($validator->fails()) {
@@ -232,6 +234,7 @@ class HouseSettingController extends BaseController
             'value.required' => 'Nội quy là bắt buộc.',
             'house_id.required' => 'Mã nhà là bắt buộc.',
             'house_id.exists' => 'Mã nhà không tồn tại.',
+            'description.string' => 'Mô tả phải là chuỗi.',
         ]);
 
         if ($validator->fails()) {

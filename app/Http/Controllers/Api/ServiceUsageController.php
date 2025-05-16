@@ -145,7 +145,7 @@ class ServiceUsageController extends BaseController
 
         return $this->sendResponse(
             ServiceUsageResource::collection($serviceUsages)->response()->getData(true),
-            'Service usages retrieved successfully.'
+            'Sử dụng dịch vụ đã được lấy thành công.'
         );
     }
 
@@ -166,7 +166,30 @@ class ServiceUsageController extends BaseController
             'year' => 'required|integer|min:2000|max:2100',
             'price_used' => 'required|integer|min:0',
             'description' => 'sometimes|nullable|string',
+        ], [
+            'room_service_id.required' => 'ID dịch vụ phòng là bắt buộc.',
+            'room_service_id.exists' => 'ID dịch vụ phòng không hợp lệ.',
+            'start_meter.numeric' => 'Đọc công tơ bắt đầu phải là một số.',
+            'start_meter.min' => 'Đọc công tơ bắt đầu phải lớn hơn 0.',
+            'end_meter.numeric' => 'Đọc công tơ kết thúc phải là một số.',
+            'end_meter.min' => 'Đọc công tơ kết thúc phải lớn hơn 0.',
+            'usage_value.required' => 'Giá trị sử dụng là bắt buộc.',
+            'usage_value.numeric' => 'Giá trị sử dụng phải là một số.',
+            'usage_value.min' => 'Giá trị sử dụng phải lớn hơn 0.',
+            'month.required' => 'Tháng là bắt buộc.',
+            'month.integer' => 'Tháng phải là một số.',
+            'month.min' => 'Tháng phải lớn hơn 0.',
+            'month.max' => 'Tháng phải nhỏ hơn 13.',
+            'year.required' => 'Năm là bắt buộc.',
+            'year.integer' => 'Năm phải là một số.',
+            'year.min' => 'Năm phải lớn hơn 2000.',
+            'year.max' => 'Năm phải nhỏ hơn 2100.',
+            'price_used.required' => 'Giá sử dụng là bắt buộc.',
+            'price_used.integer' => 'Giá sử dụng phải là một số.',
+            'price_used.min' => 'Giá sử dụng phải lớn hơn 0.',
+            'description.string' => 'Mô tả phải là một chuỗi.',
         ]);
+
 
         if ($validator->fails()) {
             return $this->sendError('Validation Error.', $validator->errors());
@@ -174,20 +197,20 @@ class ServiceUsageController extends BaseController
 
         // Check if meters are valid
         if (isset($input['start_meter']) && isset($input['end_meter']) && $input['start_meter'] > $input['end_meter']) {
-            return $this->sendError('Validation Error.', ['end_meter' => 'End meter must be greater than or equal to start meter']);
+            return $this->sendError('Lỗi dữ liệu.', ['end_meter' => 'Đọc công tơ kết thúc phải lớn hơn hoặc bằng đọc công tơ bắt đầu']);
         }
 
         // Check authorization
         $roomService = RoomService::with('room.house')->find($input['room_service_id']);
         if (!$roomService) {
-            return $this->sendError('Room service not found.');
+            return $this->sendError('Dịch vụ phòng không tồn tại.');
         }
 
         // Only managers of the house or admins can add service usages
         if ($user->role->code === 'tenant') {
-            return $this->sendError('Unauthorized', ['error' => 'Tenants cannot add service usages'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Người thuê không thể thêm sử dụng dịch vụ'], 403);
         } elseif ($user->role->code === 'manager' && $roomService->room->house->manager_id !== $user->id) {
-            return $this->sendError('Unauthorized', ['error' => 'You can only add service usages for rooms in houses you manage'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể thêm sử dụng dịch vụ cho phòng trong nhà ở bạn quản lý'], 403);
         }
 
         // Check if a record already exists for this service in the specified month/year
@@ -197,14 +220,14 @@ class ServiceUsageController extends BaseController
             ->first();
 
         if ($existingUsage) {
-            return $this->sendError('Validation Error.', ['service_usage' => 'A usage record already exists for this service in the specified month/year']);
+            return $this->sendError('Lỗi dữ liệu.', ['service_usage' => 'Đã có bản ghi sử dụng dịch vụ cho tháng/năm này']);
         }
 
         $serviceUsage = ServiceUsage::create($input);
 
         return $this->sendResponse(
             new ServiceUsageResource($serviceUsage->load('roomService')),
-            'Service usage created successfully.'
+            'Sử dụng dịch vụ đã được tạo thành công.'
         );
     }
 
@@ -217,17 +240,17 @@ class ServiceUsageController extends BaseController
         $serviceUsage = ServiceUsage::with('roomService.room.house', 'roomService.service')->find($id);
 
         if (is_null($serviceUsage)) {
-            return $this->sendError('Service usage not found.');
+            return $this->sendError('Bản ghi sử dụng dịch vụ không tồn tại.');
         }
 
         // Authorization check
         if (!$this->canAccessServiceUsage($user, $serviceUsage)) {
-            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to view this service usage'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền xem bản ghi sử dụng dịch vụ này'], 403);
         }
 
         return $this->sendResponse(
             new ServiceUsageResource($serviceUsage),
-            'Service usage retrieved successfully.'
+            'Sử dụng dịch vụ đã được lấy thành công.'
         );
     }
 
@@ -241,12 +264,12 @@ class ServiceUsageController extends BaseController
         $serviceUsage = ServiceUsage::with('roomService.room.house')->find($id);
 
         if (is_null($serviceUsage)) {
-            return $this->sendError('Service usage not found.');
+            return $this->sendError('Bản ghi sử dụng dịch vụ không tồn tại.');
         }
 
         // Authorization check
         if (!$this->canManageServiceUsage($user, $serviceUsage)) {
-            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to update this service usage'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền cập nhật bản ghi sử dụng dịch vụ này'], 403);
         }
 
         $validator = Validator::make($input, [
@@ -255,31 +278,41 @@ class ServiceUsageController extends BaseController
             'usage_value' => 'sometimes|numeric|min:0',
             'price_used' => 'sometimes|integer|min:0',
             'description' => 'sometimes|nullable|string',
+        ], [
+            'start_meter.numeric' => 'Đọc công tơ bắt đầu phải là một số.',
+            'start_meter.min' => 'Đọc công tơ bắt đầu phải lớn hơn 0.',
+            'end_meter.numeric' => 'Đọc công tơ kết thúc phải là một số.',
+            'end_meter.min' => 'Đọc công tơ kết thúc phải lớn hơn 0.',
+            'usage_value.numeric' => 'Giá trị sử dụng phải là một số.',
+            'usage_value.min' => 'Giá trị sử dụng phải lớn hơn 0.',
+            'price_used.integer' => 'Giá sử dụng phải là một số.',
+            'price_used.min' => 'Giá sử dụng phải lớn hơn 0.',
+            'description.string' => 'Mô tả phải là một chuỗi.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors());
         }
 
         // Check if meters are valid when both are provided
         if (isset($input['start_meter']) && isset($input['end_meter']) && $input['start_meter'] > $input['end_meter']) {
-            return $this->sendError('Validation Error.', ['end_meter' => 'End meter must be greater than or equal to start meter']);
+            return $this->sendError('Lỗi dữ liệu.', ['end_meter' => 'Đọc công tơ kết thúc phải lớn hơn hoặc bằng đọc công tơ bắt đầu']);
         }
 
         // When only one meter is provided, check against existing value
         if (isset($input['start_meter']) && !isset($input['end_meter']) && $input['start_meter'] > $serviceUsage->end_meter) {
-            return $this->sendError('Validation Error.', ['start_meter' => 'Start meter cannot be greater than end meter']);
+            return $this->sendError('Lỗi dữ liệu.', ['start_meter' => 'Đọc công tơ bắt đầu không thể lớn hơn đọc công tơ kết thúc']);
         }
 
         if (!isset($input['start_meter']) && isset($input['end_meter']) && $serviceUsage->start_meter > $input['end_meter']) {
-            return $this->sendError('Validation Error.', ['end_meter' => 'End meter cannot be less than start meter']);
+            return $this->sendError('Lỗi dữ liệu.', ['end_meter' => 'Đọc công tơ kết thúc không thể nhỏ hơn đọc công tơ bắt đầu']);
         }
 
         $serviceUsage->update($input);
 
         return $this->sendResponse(
             new ServiceUsageResource($serviceUsage->load('roomService')),
-            'Service usage updated successfully.'
+            'Sử dụng dịch vụ đã được cập nhật thành công.'
         );
     }
 
@@ -292,17 +325,17 @@ class ServiceUsageController extends BaseController
         $serviceUsage = ServiceUsage::with('roomService.room.house')->find($id);
 
         if (is_null($serviceUsage)) {
-            return $this->sendError('Service usage not found.');
+            return $this->sendError('Bản ghi sử dụng dịch vụ không tồn tại.');
         }
 
         // Authorization check - only admins and managers can delete service usages
         if (!$this->canManageServiceUsage($user, $serviceUsage)) {
-            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to delete this service usage'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền xóa bản ghi sử dụng dịch vụ này'], 403);
         }
 
         $serviceUsage->delete();
 
-        return $this->sendResponse([], 'Service usage deleted successfully.');
+        return $this->sendResponse([], 'Bản ghi sử dụng dịch vụ đã được xóa thành công.');
     }
 
     /**

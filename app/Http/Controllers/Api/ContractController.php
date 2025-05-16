@@ -39,7 +39,7 @@ class ContractController extends BaseController
     {
         $currentUser = auth()->user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized.', [], 401);
+            return $this->sendError('Lỗi xác thực.', [], 401);
         }
 
         $query = Contract::query();
@@ -129,7 +129,7 @@ class ContractController extends BaseController
 
         return $this->sendResponse(
             ContractResource::collection($contracts)->response()->getData(true),
-            'Contracts retrieved successfully.'
+            'Danh sách hợp đồng đã được lấy thành công.'
         );
     }
 
@@ -137,15 +137,15 @@ class ContractController extends BaseController
     {
         $currentUser = auth()->user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized.', [], 403);
+            return $this->sendError('Lỗi xác thực.', [], 403);
         }
 
         if ($currentUser->role->code === 'tenant') {
-            return $this->sendError('Unauthorized. As a tenant, you cannot create contracts.', [], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền tạo hợp đồng'], 403);
         }
 
         if (!$this->isAuthorizedForRoom($request->room_id)) {
-            return $this->sendError('Unauthorized. You can only manage contracts for properties you manage.', [], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể quản lý hợp đồng cho tài sản mà bạn quản lý'], 403);
         }
 
         $validator = Validator::make($request->all(), [
@@ -160,10 +160,32 @@ class ContractController extends BaseController
             'deposit_status' => 'sometimes|in:held,refunded,partial',
             'status' => 'sometimes|in:draft,active,terminated,expired',
             'auto_renew' => 'sometimes|boolean',
+        ], [
+            'room_id.required' => 'Phòng là bắt buộc',
+            'room_id.exists' => 'Phòng không tồn tại',
+            'user_ids.required' => 'Người thuê là bắt buộc',
+            'user_ids.array' => 'Người thuê phải là mảng',
+            'user_ids.*.exists' => 'Một hoặc nhiều người thuê không tồn tại',
+            'start_date.required' => 'Ngày bắt đầu là bắt buộc',
+            'start_date.date' => 'Ngày bắt đầu không hợp lệ',
+            'end_date.required' => 'Ngày kết thúc là bắt buộc',
+            'end_date.date' => 'Ngày kết thúc không hợp lệ',
+            'end_date.after' => 'Ngày kết thúc phải sau ngày bắt đầu',
+            'monthly_price.required' => 'Giá thuê tháng là bắt buộc',
+            'monthly_price.integer' => 'Giá thuê tháng phải là số',
+            'monthly_price.min' => 'Giá thuê tháng phải lớn hơn 0', 
+            'deposit_amount.required' => 'Tiền cọc là bắt buộc',
+            'deposit_amount.integer' => 'Tiền cọc phải là số',
+            'deposit_amount.min' => 'Tiền cọc phải lớn hơn 0',
+            'notice_period.integer' => 'Thời gian thông báo phải là số',
+            'notice_period.min' => 'Thời gian thông báo phải lớn hơn 0',
+            'deposit_status.in' => 'Trạng thái cọc không hợp lệ',
+            'status.in' => 'Trạng thái hợp đồng không hợp lệ',
+            'auto_renew.boolean' => 'Tự động gia hạn phải là boolean',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors(), 422);
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors(), 422);
         }
 
         try {
@@ -192,12 +214,12 @@ class ContractController extends BaseController
 
             return $this->sendResponse(
                 new ContractResource($contract),
-                'Contract created successfully.'
+                'Hợp đồng đã được tạo thành công.'
             );
 
         } catch (\Exception $e) {
             DB::rollBack();
-            return $this->sendError('Contract creation failed.', ['error' => $e->getMessage()], 500);
+            return $this->sendError('Lỗi khi tạo hợp đồng.', ['error' => $e->getMessage()], 500);
         }
     }
 
@@ -205,27 +227,27 @@ class ContractController extends BaseController
     {
         $currentUser = auth()->user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized.', [], 401);
+            return $this->sendError('Lỗi xác thực.', [], 401);
         }
 
         $contract = Contract::with(['room.house', 'creator', 'users', 'updater'])->find($id);
 
         if (is_null($contract)) {
-            return $this->sendError('Contract not found.', [], 404);
+            return $this->sendError('Hợp đồng không tồn tại.', [], 404);
         }
 
         if ($currentUser->role->code === 'tenant') {
             $isUserContract = $contract->users->contains('id', $currentUser->id);
             if (!$isUserContract) {
-                return $this->sendError('Unauthorized. You can only view your own contracts.', [], 403);
+                return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể xem hợp đồng của chính mình'], 403);
             }
         } elseif (!$this->isAuthorizedForRoom($contract->room_id)) {
-            return $this->sendError('Unauthorized. You can only view contracts for properties you manage.', [], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể xem hợp đồng cho phòng mà bạn quản lý'], 403);
         }
 
         return $this->sendResponse(
             new ContractResource($contract),
-            'Contract retrieved successfully.'
+            'Hợp đồng đã được lấy thành công.'
         );
     }
 
@@ -233,25 +255,25 @@ class ContractController extends BaseController
     {
         $currentUser = auth()->user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized.', [], 401);
+            return $this->sendError('Lỗi xác thực.', [], 401);
         }
 
         if ($currentUser->role->code === 'tenant') {
-            return $this->sendError('Unauthorized. As a tenant, you cannot update contracts.', [], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền cập nhật hợp đồng'], 403);
         }
 
         $contract = Contract::find($id);
         if (is_null($contract)) {
-            return $this->sendError('Contract not found.', [], 404);
+            return $this->sendError('Hợp đồng không tồn tại.', [], 404);
         }
 
         if (!$this->isAuthorizedForRoom($contract->room_id)) {
-            return $this->sendError('Unauthorized. You can only manage contracts for properties you manage.', [], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể cập nhật hợp đồng cho phòng mà bạn quản lý'], 403);
         }
 
         if ($request->has('room_id') && $request->room_id != $contract->room_id) {
             if (!$this->isAuthorizedForRoom($request->room_id)) {
-                return $this->sendError('Unauthorized. You can only assign contracts to rooms in properties you manage.', [], 403);
+                return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể gán hợp đồng cho phòng trong tài sản mà bạn quản lý'], 403);
             }
         }
 
@@ -268,10 +290,25 @@ class ContractController extends BaseController
             'termination_reason' => 'sometimes|string|nullable',
             'status' => 'sometimes|in:draft,active,terminated,expired',
             'auto_renew' => 'sometimes|boolean',
+        ], [
+            'room_id.exists' => 'Phòng không tồn tại',
+            'user_ids.*.exists' => 'Một hoặc nhiều người thuê không tồn tại',
+            'start_date.date' => 'Ngày bắt đầu không hợp lệ',
+            'end_date.date' => 'Ngày kết thúc không hợp lệ',
+            'end_date.after' => 'Ngày kết thúc phải sau ngày bắt đầu',
+            'monthly_price.integer' => 'Giá thuê tháng phải là số',
+            'monthly_price.min' => 'Giá thuê tháng phải lớn hơn 0',
+            'deposit_amount.integer' => 'Tiền cọc phải là số',
+            'deposit_amount.min' => 'Tiền cọc phải lớn hơn 0',
+            'notice_period.integer' => 'Thời gian thông báo phải là số',
+            'notice_period.min' => 'Thời gian thông báo phải lớn hơn 0',
+            'termination_reason.string' => 'Lý do huỷ bỏ phải là chuỗi',
+            'status.in' => 'Trạng thái hợp đồng không hợp lệ',
+            'auto_renew.boolean' => 'Tự động gia hạn phải là boolean',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors(), 422);
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors(), 422);
         }
 
         try {
@@ -317,12 +354,12 @@ class ContractController extends BaseController
 
             return $this->sendResponse(
                 new ContractResource($contract),
-                'Contract updated successfully.'
+                'Hợp đồng đã được cập nhật thành công.'
             );
 
         } catch (\Exception $e) {
             DB::rollBack();
-            return $this->sendError('Contract update failed.', ['error' => $e->getMessage()], 500);
+            return $this->sendError('Lỗi khi cập nhật hợp đồng.', ['error' => $e->getMessage()], 500);
         }
     }
 
@@ -330,20 +367,20 @@ class ContractController extends BaseController
     {
         $currentUser = auth()->user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized.', [], 401);
+            return $this->sendError('Lỗi xác thực.', [], 401);
         }
 
         if ($currentUser->role->code === 'tenant') {
-            return $this->sendError('Unauthorized. As a tenant, you cannot delete contracts.', [], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền xóa hợp đồng'], 403);
         }
 
         $contract = Contract::find($id);
         if (is_null($contract)) {
-            return $this->sendError('Contract not found.', [], 404);
+            return $this->sendError('Hợp đồng không tồn tại.', [], 404);
         }
 
         if (!$this->isAuthorizedForRoom($contract->room_id)) {
-            return $this->sendError('Unauthorized. You can only manage contracts for properties you manage.', [], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể xóa hợp đồng cho phòng mà bạn quản lý'], 403);
         }
 
         try {
@@ -370,10 +407,10 @@ class ContractController extends BaseController
             
             DB::commit();
             
-            return $this->sendResponse([], 'Contract deleted successfully.');
+            return $this->sendResponse([], 'Hợp đồng đã được xóa thành công.');
         } catch (\Exception $e) {
             DB::rollBack();
-            return $this->sendError('Contract deletion failed.', ['error' => $e->getMessage()], 500);
+            return $this->sendError('Lỗi khi xóa hợp đồng.', ['error' => $e->getMessage()], 500);
         }
     }
 
@@ -384,11 +421,11 @@ class ContractController extends BaseController
     {
         $currentUser = auth()->user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized.', [], 401);
+            return $this->sendError('Lỗi xác thực.', [], 401);
         }
         
         if ($currentUser->role->code === 'tenant') {
-            return $this->sendError('Unauthorized. As a tenant, you cannot access this resource.', [], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền truy cập vào tài nguyên này'], 403);
         }
         
         $validator = Validator::make($request->all(), [
@@ -401,7 +438,7 @@ class ContractController extends BaseController
         
         // Kiểm tra quyền truy cập phòng
         if (!$this->isAuthorizedForRoom($request->room_id)) {
-            return $this->sendError('Unauthorized. You can only access rooms you manage.', [], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể truy cập phòng mà bạn quản lý'], 403);
         }
         
         // Tạo query cơ bản
@@ -419,7 +456,7 @@ class ContractController extends BaseController
         
         return $this->sendResponse(
             UserResource::collection($tenants),
-            'Available tenants retrieved successfully.'
+            'Danh sách người thuê đã được lấy thành công.'
         );
     }
 }

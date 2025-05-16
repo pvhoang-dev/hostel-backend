@@ -39,7 +39,6 @@ class InvoiceController extends BaseController
                 $q->whereIn('house_id', $managedHouseIds);
             });
         }
-        // Admins can see all invoices, so no filter needed
 
         // Apply additional filters
         if ($request->has('id')) {
@@ -160,23 +159,48 @@ class InvoiceController extends BaseController
             'payment_status' => 'nullable|in:pending,completed,failed,refunded',
             'payment_date' => isset($input['payment_status']) && $input['payment_status'] === 'completed' ? 'required|date' : 'nullable|date',
             'transaction_code' => 'nullable|string|max:255|unique:invoices,transaction_code',
+        ], [
+            'room_id.required' => 'Phòng là bắt buộc',
+            'room_id.exists' => 'Phòng không tồn tại',
+            'invoice_type.required' => 'Loại hóa đơn là bắt buộc',
+            'invoice_type.in' => 'Loại hóa đơn không hợp lệ',
+            'month.required' => 'Tháng là bắt buộc',
+            'month.integer' => 'Tháng phải là số nguyên',
+            'year.required' => 'Năm là bắt buộc',
+            'year.integer' => 'Năm phải là số nguyên',
+            'year.min' => 'Năm không được nhỏ hơn 2000',
+            'year.max' => 'Năm không được lớn hơn 2100',
+            'items.required' => 'Chi tiết hóa đơn là bắt buộc',
+            'items.array' => 'Chi tiết hóa đơn phải là mảng',
+            'items.min' => 'Hóa đơn phải có ít nhất một chi tiết',
+            'items.*.source_type.required' => 'Loại nguồn là bắt buộc',
+            'items.*.source_type.in' => 'Loại nguồn không hợp lệ',
+            'items.*.service_usage_id.required_if' => 'ID sử dụng dịch vụ là bắt buộc khi loại nguồn là service_usage',
+            'items.*.service_usage_id.exists' => 'ID sử dụng dịch vụ không tồn tại',
+            'items.*.amount.required' => 'Số tiền là bắt buộc',
+            'items.*.amount.integer' => 'Số tiền phải là số nguyên',
+            'payment_method_id.exists' => 'Phương thức thanh toán không tồn tại',
+            'payment_status.in' => 'Trạng thái thanh toán không hợp lệ',
+            'payment_date.required' => 'Ngày thanh toán là bắt buộc khi trạng thái là đã thanh toán',
+            'payment_date.date' => 'Ngày thanh toán không hợp lệ',
+            'transaction_code.unique' => 'Mã giao dịch đã tồn tại',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors());
         }
 
         // Check authorization
         $room = Room::with('house')->find($input['room_id']);
         if (!$room) {
-            return $this->sendError('Room not found.');
+            return $this->sendError('Phòng không tồn tại.');
         }
 
         // Only managers of the house or admins can create invoices
         if ($user->role->code === 'tenant') {
-            return $this->sendError('Unauthorized', ['error' => 'Tenants cannot create invoices'], 403);
+            return $this->sendError('Không được phép tạo hóa đơn.');
         } elseif ($user->role->code === 'manager' && $room->house->manager_id !== $user->id) {
-            return $this->sendError('Unauthorized', ['error' => 'You can only create invoices for rooms in houses you manage'], 403);
+            return $this->sendError('Không được phép tạo hóa đơn cho phòng này.');
         }
 
         // Chỉ kiểm tra nếu đang tạo hóa đơn loại service_usage
@@ -189,7 +213,7 @@ class InvoiceController extends BaseController
                 ->first();
             
             if ($existingInvoice) {
-                return $this->sendError('Validation Error.', [
+                return $this->sendError('Lỗi dữ liệu.', [
                     'invoice' => 'Đã tồn tại hóa đơn cho phòng này trong tháng '.$input['month'].'/'.$input['year'].'.'
                 ]);
             }
@@ -202,22 +226,22 @@ class InvoiceController extends BaseController
                     $serviceUsage = ServiceUsage::with('roomService')->find($item['service_usage_id']);
 
                     if (!$serviceUsage) {
-                        return $this->sendError('Validation Error.', ['items' => 'Service usage not found']);
+                        return $this->sendError('Lỗi dữ liệu.', ['items' => 'Service usage not found']);
                     }
 
                     // Check if service usage belongs to a room service in the specified room
                     if ($serviceUsage->roomService->room_id !== $room->id) {
                         return $this->sendError(
-                            'Validation Error.',
-                            ['items' => 'Service usage must belong to the specified room']
+                            'Lỗi dữ liệu.',
+                            ['items' => 'Service usage phải thuộc phòng đã chọn']
                         );
                     }
 
                     // Check if service usage is for the specified month/year
                     if ($serviceUsage->month != $input['month'] || $serviceUsage->year != $input['year']) {
                         return $this->sendError(
-                            'Validation Error.',
-                            ['items' => 'Service usage month/year must match invoice month/year']
+                            'Lỗi dữ liệu.',
+                            ['items' => 'Service usage tháng/năm phải khớp với hóa đơn tháng/năm']
                         );
                     }
                 }
@@ -260,11 +284,11 @@ class InvoiceController extends BaseController
 
             return $this->sendResponse(
                 new InvoiceResource($invoice->load(['room', 'items', 'creator'])),
-                'Invoice created successfully.'
+                'Hóa đơn đã được tạo thành công.'
             );
         } catch (\Exception $e) {
             DB::rollBack();
-            return $this->sendError('Creation Error.', ['error' => $e->getMessage()]);
+            return $this->sendError('Lỗi tạo hóa đơn.', ['error' => $e->getMessage()]);
         }
     }
 
@@ -277,17 +301,17 @@ class InvoiceController extends BaseController
         $invoice = Invoice::with(['room.house', 'items.service_usage.roomService.service', 'paymentMethod', 'creator', 'updater'])->find($id);
 
         if (is_null($invoice)) {
-            return $this->sendError('Invoice not found.');
+            return $this->sendError('Hóa đơn không tồn tại.');
         }
 
         // Authorization check
         if (!$this->canAccessInvoice($user, $invoice)) {
-            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to view this invoice'], 403);
+            return $this->sendError('Không được phép xem hóa đơn này.');
         }
 
         return $this->sendResponse(
             new InvoiceResource($invoice),
-            'Invoice retrieved successfully.'
+            'Hóa đơn đã được lấy thành công.'
         );
     }
 
@@ -299,18 +323,15 @@ class InvoiceController extends BaseController
         $user = Auth::user();
         $input = $request->all();
         
-        // Log toàn bộ dữ liệu đầu vào để debug
-        \Illuminate\Support\Facades\Log::info('Update invoice input data:', ['input' => $input, 'id' => $id]);
-        
         $invoice = Invoice::with(['room.house', 'items'])->find($id);
 
         if (is_null($invoice)) {
-            return $this->sendError('Invoice not found.');
+            return $this->sendError('Hóa đơn không tồn tại.');
         }
 
         // Authorization check
         if (!$this->canManageInvoice($user, $invoice)) {
-            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to update this invoice'], 403);
+            return $this->sendError('Không được phép cập nhật hóa đơn này.');
         }
 
         try {
@@ -367,7 +388,6 @@ class InvoiceController extends BaseController
             // Xóa các item manual không nằm trong danh sách gửi lên
             foreach ($existingManualItems as $manualItem) {
                 if (!in_array($manualItem->id, $requestItemIds)) {
-                    \Illuminate\Support\Facades\Log::info('Deleting manual item not in request:', ['id' => $manualItem->id]);
                     $manualItem->delete();
                 }
             }
@@ -375,9 +395,6 @@ class InvoiceController extends BaseController
             // Nếu có items gửi lên, xử lý từng item
             if (isset($input['items']) && is_array($input['items'])) {
                 foreach ($input['items'] as $index => $itemData) {
-                    // Log thông tin chi tiết về từng item
-                    \Illuminate\Support\Facades\Log::info('Processing item:', ['index' => $index, 'item' => $itemData]);
-                    
                     // Kiểm tra nếu là item mới (không có ID hoặc ID rỗng)
                     if (!isset($itemData['id']) || empty($itemData['id'])) {
                         $newItem = new InvoiceItem();
@@ -391,11 +408,7 @@ class InvoiceController extends BaseController
                                 : $itemData['service_usage_id']) 
                             : null;
                         
-                        $saveResult = $newItem->save();
-                        \Illuminate\Support\Facades\Log::info('New item save result:', [
-                            'success' => $saveResult, 
-                            'item' => $newItem->toArray()
-                        ]);
+                        $newItem->save();
                     } else {
                         // Cập nhật item hiện có
                         $existingItem = InvoiceItem::where('id', $itemData['id'])
@@ -409,11 +422,7 @@ class InvoiceController extends BaseController
                                 $existingItem->description = $itemData['description'] ?? $existingItem->description;
                                 $existingItem->save();
                             }
-                            
-                            \Illuminate\Support\Facades\Log::info('Updated existing item:', [
-                                'id' => $existingItem->id,
-                                'type' => $existingItem->source_type
-                            ]);
+
                         }
                     }
                 }
@@ -423,7 +432,6 @@ class InvoiceController extends BaseController
             if (isset($input['deleted_service_usage_ids']) && is_array($input['deleted_service_usage_ids']) && !empty($input['deleted_service_usage_ids'])) {
                 foreach ($input['deleted_service_usage_ids'] as $index => $usageId) {
                     $normalizedId = is_array($usageId) && isset($usageId['id']) ? $usageId['id'] : $usageId;
-                    \Illuminate\Support\Facades\Log::info('Deleting service usage:', ['index' => $index, 'id' => $normalizedId]);
                     
                     if (empty($normalizedId)) continue;
                     
@@ -444,7 +452,6 @@ class InvoiceController extends BaseController
             
             // Đếm số lượng items sau khi cập nhật
             $itemCount = InvoiceItem::where('invoice_id', $invoice->id)->count();
-            \Illuminate\Support\Facades\Log::info('Final item count:', ['count' => $itemCount]);
             
             // Nếu không còn item nào, xóa hóa đơn
             if ($itemCount === 0) {
@@ -460,7 +467,6 @@ class InvoiceController extends BaseController
             
             // Tải lại invoice với tất cả quan hệ
             $refreshedInvoice = Invoice::with(['room.house', 'items.service_usage.roomService.service', 'updater'])->find($invoice->id);
-            \Illuminate\Support\Facades\Log::info('Refreshed invoice item count:', ['count' => $refreshedInvoice->items->count()]);
             
             // Commit transaction
             DB::commit();
@@ -471,7 +477,6 @@ class InvoiceController extends BaseController
             );
         } catch (\Exception $e) {
             DB::rollBack();
-            \Illuminate\Support\Facades\Log::error('Error updating invoice:', ['exception' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             return $this->sendError('Update Error.', ['error' => $e->getMessage()]);
         }
     }
@@ -485,12 +490,12 @@ class InvoiceController extends BaseController
         $invoice = Invoice::with(['room.house'])->find($id);
 
         if (is_null($invoice)) {
-            return $this->sendError('Invoice not found.');
+            return $this->sendError('Hóa đơn không tồn tại.');
         }
 
         // Authorization check
         if (!$this->canManageInvoice($user, $invoice)) {
-            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to delete this invoice'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền xóa hóa đơn này'], 403);
         }
 
         try {
@@ -501,10 +506,10 @@ class InvoiceController extends BaseController
             
             DB::commit();
             
-            return $this->sendResponse([], 'Invoice and related transactions deleted successfully.');
+            return $this->sendResponse([], 'Hóa đơn và giao dịch liên quan đã được xóa thành công.');
         } catch (\Exception $e) {
             DB::rollBack();
-            return $this->sendError('Delete Error.', ['error' => $e->getMessage()]);
+            return $this->sendError('Lỗi xóa hóa đơn.', ['error' => $e->getMessage()]);
         }
     }
 
@@ -567,12 +572,12 @@ class InvoiceController extends BaseController
         $invoice = Invoice::with(['room.house'])->find($id);
         
         if (is_null($invoice)) {
-            return $this->sendError('Invoice not found.');
+            return $this->sendError('Hóa đơn không tồn tại.');
         }
         
         // Kiểm tra quyền hạn
         if (!$this->canManageInvoice($user, $invoice)) {
-            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to update this invoice'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền cập nhật hóa đơn này'], 403);
         }
         
         $validator = Validator::make($request->all(), [
@@ -580,10 +585,19 @@ class InvoiceController extends BaseController
             'payment_status' => 'required|in:pending,completed,failed,refunded',
             'payment_date' => $request->payment_status === 'completed' ? 'required|date' : 'nullable|date',
             'transaction_code' => 'sometimes|string|max:255|unique:invoices,transaction_code,' . $invoice->id,
+        ], [
+            'payment_method_id.required' => 'Phương thức thanh toán là bắt buộc',
+            'payment_method_id.exists' => 'Phương thức thanh toán không tồn tại',
+            'payment_status.required' => 'Trạng thái thanh toán là bắt buộc',
+            'payment_status.in' => 'Trạng thái thanh toán không hợp lệ',
+            'payment_date.required' => 'Ngày thanh toán là bắt buộc khi trạng thái là đã thanh toán',
+            'payment_date.date' => 'Ngày thanh toán không hợp lệ',
+            'transaction_code.unique' => 'Mã giao dịch đã tồn tại',
         ]);
         
+        
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors());
         }
         
         // Cập nhật thông tin thanh toán
@@ -603,7 +617,7 @@ class InvoiceController extends BaseController
         
         return $this->sendResponse(
             new InvoiceResource($invoice->load(['room.house', 'items', 'paymentMethod', 'creator', 'updater'])),
-            'Invoice payment status updated successfully.'
+            'Trạng thái thanh toán hóa đơn đã được cập nhật thành công.'
         );
     }
 
@@ -614,7 +628,7 @@ class InvoiceController extends BaseController
     {
         $user = Auth::user();
         if (!$user) {
-            return $this->sendError('Unauthorized.', [], 401);
+            return $this->sendError('Lỗi xác thực.', [], 401);
         }
 
         $validator = Validator::make($request->all(), [
@@ -622,10 +636,17 @@ class InvoiceController extends BaseController
             'invoice_ids.*' => 'exists:invoices,id',
             'amount' => 'required|numeric|min:1000',
             'description' => 'nullable|string',
+        ], [
+            'invoice_ids.required' => 'Danh sách hóa đơn là bắt buộc',
+            'invoice_ids.array' => 'Danh sách hóa đơn phải là mảng',
+            'invoice_ids.*.exists' => 'Một hoặc nhiều hóa đơn không tồn tại',
+            'amount.required' => 'Số tiền thanh toán là bắt buộc',
+            'amount.numeric' => 'Số tiền thanh toán phải là số',
+            'amount.min' => 'Số tiền thanh toán phải lớn hơn 1000',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors(), 422);
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors(), 422);
         }
 
         $invoiceIds = $request->invoice_ids;
@@ -647,7 +668,7 @@ class InvoiceController extends BaseController
             // Kiểm tra xem tất cả các invoice_ids có thuộc về tenant không
             foreach ($invoiceIds as $invoiceId) {
                 if (!in_array($invoiceId, $tenantInvoiceIds)) {
-                    return $this->sendError('Unauthorized. You can only pay your own invoices.', [], 403);
+                    return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể thanh toán hóa đơn của chính mình'], 403);
                 }
             }
         }

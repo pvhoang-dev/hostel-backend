@@ -42,7 +42,7 @@ class RoomController extends BaseController
                     // If tenant doesn't have any active contracts, return empty result
                     return $this->sendResponse(
                         ['data' => [], 'meta' => ['current_page' => 1, 'last_page' => 1, 'total' => 0, 'per_page' => 15]],
-                        'No rooms found for this tenant.'
+                        'Không tìm thấy phòng cho khách hàng này.'
                     );
                 }
                 
@@ -129,7 +129,7 @@ class RoomController extends BaseController
 
         return $this->sendResponse(
             RoomResource::collection($rooms)->response()->getData(true),
-            'Rooms retrieved successfully.'
+            'Phòng đã được lấy thành công.'
         );
     }
 
@@ -143,7 +143,7 @@ class RoomController extends BaseController
     {
         $currentUser = Auth::user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized.', [], 401);
+            return $this->sendError('Lỗi xác thực.', [], 401);
         }
 
         $input = $request->all();
@@ -161,10 +161,27 @@ class RoomController extends BaseController
             'description' => 'nullable|string',
             'status' => 'sometimes|string|max:10',
             'base_price' => 'required|integer|min:0',
+        ], [
+            'house_id.required' => 'Mã nhà không được để trống.',
+            'house_id.exists' => 'Mã nhà không tồn tại.',
+            'room_number.required' => 'Mã phòng không được để trống.',
+            'room_number.string' => 'Mã phòng phải là một chuỗi.',
+            'room_number.max' => 'Mã phòng không được vượt quá 10 ký tự.',
+            'room_number.unique' => 'Mã phòng đã tồn tại.',
+            'capacity.required' => 'Số lượng khách không được để trống.',
+            'capacity.integer' => 'Số lượng khách phải là một số nguyên.',
+            'capacity.min' => 'Số lượng khách phải lớn hơn 0.',
+            'base_price.required' => 'Giá cơ bản không được để trống.',
+            'base_price.integer' => 'Giá cơ bản phải là một số nguyên.',
+            'base_price.min' => 'Giá cơ bản phải lớn hơn 0.',
+            'status.string' => 'Trạng thái phải là một chuỗi.',
+            'status.max' => 'Trạng thái không được vượt quá 10 ký tự.',
+            'description.string' => 'Mô tả phải là một chuỗi.',
+            'description.max' => 'Mô tả không được vượt quá 255 ký tự.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors(), 422);
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors(), 422);
         }
 
         $input['created_by'] = $currentUser->id;
@@ -173,7 +190,7 @@ class RoomController extends BaseController
         $room = Room::create($input);
         $room->load('house');
 
-        return $this->sendResponse(new RoomResource($room), 'Room created successfully.');
+        return $this->sendResponse(new RoomResource($room), 'Phòng đã được tạo thành công.');
     }
 
     /**
@@ -188,7 +205,7 @@ class RoomController extends BaseController
         $room = Room::with(['house'])->find($id);
 
         if (is_null($room)) {
-            return $this->sendError('Room not found.');
+            return $this->sendError('Phòng không tồn tại.');
         }
 
         // Kiểm tra quyền truy cập
@@ -200,11 +217,11 @@ class RoomController extends BaseController
                 ->exists();
                 
             if (!$hasActiveContract) {
-                return $this->sendError('Unauthorized. You can only view your own room.', [], 403);
+                return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể xem phòng của mình.'], 403);
             }
         }
 
-        return $this->sendResponse(new RoomResource($room), 'Room retrieved successfully.');
+        return $this->sendResponse(new RoomResource($room), 'Phòng đã được lấy thành công.');
     }
 
     /**
@@ -219,12 +236,12 @@ class RoomController extends BaseController
         $room = Room::find($id);
 
         if (is_null($room)) {
-            return $this->sendError('Room not found.');
+            return $this->sendError('Phòng không tồn tại.');
         }
 
         $currentUser = Auth::user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized.', [], 401);
+            return $this->sendError('Lỗi xác thực.', [], 401);
         }
 
         // Check if user is admin or the house manager
@@ -232,7 +249,7 @@ class RoomController extends BaseController
         $isManager = $room->house->manager_id === $currentUser->id;
 
         if (!$isAdmin && !$isManager) {
-            return $this->sendError('Unauthorized. Only admins or house managers can update rooms.', [], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Chỉ quản trị viên hoặc quản lý nhà mới có thể cập nhật phòng.'], 403);
         }
 
         $validator = Validator::make($request->all(), [
@@ -250,15 +267,31 @@ class RoomController extends BaseController
             'description' => 'nullable|string',
             'status' => 'sometimes|string|max:10',
             'base_price' => 'sometimes|required|integer|min:0',
+        ], [
+            'house_id.exists' => 'Mã nhà không tồn tại.',
+            'room_number.required' => 'Mã phòng không được để trống.',
+            'room_number.string' => 'Mã phòng phải là một chuỗi.',
+            'room_number.max' => 'Mã phòng không được vượt quá 10 ký tự.',
+            'room_number.unique' => 'Mã phòng đã tồn tại.',
+            'capacity.required' => 'Số lượng khách không được để trống.',
+            'capacity.integer' => 'Số lượng khách phải là một số nguyên.',
+            'capacity.min' => 'Số lượng khách phải lớn hơn 0.',
+            'base_price.required' => 'Giá cơ bản không được để trống.',
+            'base_price.integer' => 'Giá cơ bản phải là một số nguyên.',
+            'base_price.min' => 'Giá cơ bản phải lớn hơn 0.',
+            'status.string' => 'Trạng thái phải là một chuỗi.',
+            'status.max' => 'Trạng thái không được vượt quá 10 ký tự.',
+            'description.string' => 'Mô tả phải là một chuỗi.',
+            'description.max' => 'Mô tả không được vượt quá 255 ký tự.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors(), 422);
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors(), 422);
         }
 
         // If not admin, restrict house_id from being changed
         if (!$isAdmin && isset($request->house_id) && $request->house_id != $room->house_id) {
-            return $this->sendError('Unauthorized. Only admins can change the house.', [], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Chỉ quản trị viên mới có thể thay đổi nhà.'], 403);
         }
 
         $input = $request->all();
@@ -267,7 +300,7 @@ class RoomController extends BaseController
         $room->update($input);
         $room->load('house');
 
-        return $this->sendResponse(new RoomResource($room), 'Room updated successfully.');
+        return $this->sendResponse(new RoomResource($room), 'Phòng đã được cập nhật thành công.');
     }
 
     /**
@@ -281,12 +314,12 @@ class RoomController extends BaseController
         $room = Room::find($id);
 
         if (is_null($room)) {
-            return $this->sendError('Room not found.');
+            return $this->sendError('Phòng không tồn tại.');
         }
 
         $currentUser = Auth::user();
         if (!$currentUser) {
-            return $this->sendError('Unauthorized.', [], 401);
+            return $this->sendError('Lỗi xác thực.', [], 401);
         }
 
         // Only admin or house manager can delete rooms
@@ -294,11 +327,11 @@ class RoomController extends BaseController
         $isManager = $room->house->manager_id === $currentUser->id;
 
         if (!$isAdmin && !$isManager) {
-            return $this->sendError('Unauthorized. Only admins or house managers can delete rooms.', [], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Chỉ quản trị viên hoặc quản lý nhà mới có thể xóa phòng.'], 403);
         }
 
         $room->delete();
 
-        return $this->sendResponse([], 'Room deleted successfully.');
+        return $this->sendResponse([], 'Phòng đã được xóa thành công.');
     }
 }

@@ -34,9 +34,9 @@ class AuthController extends BaseController
                 'name'      => $user->name,
             ];
 
-            return $this->sendResponse($success, 'User login successfully.');
+            return $this->sendResponse($success, 'Đăng nhập thành công.');
         } else {
-            return $this->sendError('Unauthorised.', ['error' => 'Unauthorised']);
+            return $this->sendError('Không có quyền truy cập.', ['error' => 'Tên đăng nhập hoặc mật khẩu không chính xác']);
         }
     }
 
@@ -50,6 +50,6 @@ class AuthController extends BaseController
     {
         $request->user()->currentAccessToken()->delete();
 
-        return $this->sendResponse([], 'User logged out successfully.');
+        return $this->sendResponse([], 'Đăng xuất thành công.');
     }
 }

@@ -28,7 +28,7 @@ class EquipmentController extends BaseController
 
         // Only admin and manager can view equipment list
         if (!$user || !in_array($user->role->code, ['admin', 'manager'])) {
-            return $this->sendError('Unauthorized', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
         }
 
         $query = Equipment::query();
@@ -101,7 +101,7 @@ class EquipmentController extends BaseController
 
         // Only admin and manager can create equipment
         if (!$user || !in_array($user->role->code, ['admin', 'manager'])) {
-            return $this->sendError('Unauthorized', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
         }
 
         $validator = Validator::make($request->all(), [
@@ -113,7 +113,7 @@ class EquipmentController extends BaseController
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors(), 422);
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors(), 422);
         }
 
         $equipment = Equipment::create($request->all());
@@ -136,7 +136,7 @@ class EquipmentController extends BaseController
 
         // Only admin and manager can view equipment details
         if (!$user || !in_array($user->role->code, ['admin', 'manager'])) {
-            return $this->sendError('Unauthorized', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
         }
 
         $equipment = Equipment::find($id);
@@ -164,7 +164,7 @@ class EquipmentController extends BaseController
 
         // Only admin and manager can update equipment
         if (!$user || !in_array($user->role->code, ['admin', 'manager'])) {
-            return $this->sendError('Unauthorized', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
         }
 
         $input = $request->all();
@@ -178,7 +178,7 @@ class EquipmentController extends BaseController
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Cập nhật thiết bị không thành công.', $validator->errors(), 422);
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors(), 422);
         }
 
         if (isset($input['name'])) {
@@ -205,7 +205,7 @@ class EquipmentController extends BaseController
 
         // Only admin and manager can delete equipment
         if (!$user || !in_array($user->role->code, ['admin', 'manager'])) {
-            return $this->sendError('Unauthorized', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
         }
 
         $equipment = Equipment::find($id);

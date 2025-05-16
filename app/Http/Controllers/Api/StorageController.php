@@ -105,7 +105,7 @@ class StorageController extends BaseController
 
         return $this->sendResponse(
             EquipmentStorageResource::collection($storage)->response()->getData(true),
-            'Equipment storage retrieved successfully.'
+            'Kho thiết bị đã được lấy thành công.'
         );
     }
 
@@ -164,7 +164,7 @@ class StorageController extends BaseController
 
         return $this->sendResponse(
             new EquipmentStorageResource($storage),
-            'Tạo kho thiết bị thành công.'
+            'Kho thiết bị đã được tạo thành công.'
         );
     }
 
@@ -184,7 +184,7 @@ class StorageController extends BaseController
 
         return $this->sendResponse(
             new EquipmentStorageResource($storage),
-            'Lấy thông tin kho thiết bị thành công.'
+            'Kho thiết bị đã được lấy thành công.'
         );
     }
 
@@ -248,7 +248,7 @@ class StorageController extends BaseController
 
         return $this->sendResponse(
             new EquipmentStorageResource($storage),
-            'Cập nhật kho thiết bị thành công.'
+            'Kho thiết bị đã được cập nhật thành công.'
         );
     }
 

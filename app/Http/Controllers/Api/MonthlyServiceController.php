@@ -30,10 +30,21 @@ class MonthlyServiceController extends BaseController
             'year' => 'required|integer|min:2000|max:2100',
             'house_id' => 'sometimes|nullable|exists:houses,id',
             'show_all' => 'sometimes|nullable|in:true,false,0,1',
+        ], [
+            'month.required' => 'Tháng là bắt buộc.',
+            'month.integer' => 'Tháng phải là số.',
+            'month.min' => 'Tháng phải lớn hơn 0.',
+            'month.max' => 'Tháng phải nhỏ hơn 13.',
+            'year.required' => 'Năm là bắt buộc.',
+            'year.integer' => 'Năm phải là số.',
+            'year.min' => 'Năm phải lớn hơn 2000.',
+            'year.max' => 'Năm phải nhỏ hơn 2100.',
+            'house_id.exists' => 'Nhà trọ không tồn tại.',
+            'show_all.in' => 'show_all phải là true hoặc false.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors());
         }
 
         $month = $request->month;
@@ -50,7 +61,7 @@ class MonthlyServiceController extends BaseController
             $managedHouseIds = House::where('manager_id', $user->id)->pluck('id')->toArray();
             $query->whereIn('house_id', $managedHouseIds);
         } elseif ($user->role->code !== 'admin') {
-            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to access this resource'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền truy cập vào tài nguyên này'], 403);
         }
 
         // Filter by house if provided
@@ -120,7 +131,7 @@ class MonthlyServiceController extends BaseController
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors());
         }
 
         $room = Room::with('house')->findOrFail($roomId);
@@ -129,10 +140,10 @@ class MonthlyServiceController extends BaseController
         if ($user->role->code === 'manager') {
             $managedHouseIds = House::where('manager_id', $user->id)->pluck('id')->toArray();
             if (!in_array($room->house_id, $managedHouseIds)) {
-                return $this->sendError('Unauthorized', ['error' => 'You can only access rooms in houses you manage'], 403);
+                return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể truy cập phòng trong nhà trọ mà bạn quản lý'], 403);
             }
         } elseif ($user->role->code !== 'admin') {
-            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to access this resource'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền truy cập vào tài nguyên này'], 403);
         }
 
         $month = $request->month;
@@ -225,10 +236,36 @@ class MonthlyServiceController extends BaseController
             'update_invoice' => 'sometimes|boolean', // Thêm tham số update_invoice
             'unchecked_services' => 'sometimes|array', // Thêm tham số unchecked_services
             'unchecked_services.*' => 'sometimes|exists:room_services,id', // Các ID hợp lệ
+        ], [
+            'room_id.required' => 'Phòng là bắt buộc.',
+            'room_id.exists' => 'Phòng không tồn tại.',
+            'month.required' => 'Tháng là bắt buộc.',
+            'month.integer' => 'Tháng phải là số.',
+            'month.min' => 'Tháng phải lớn hơn 0.',
+            'month.max' => 'Tháng phải nhỏ hơn 13.',
+            'year.required' => 'Năm là bắt buộc.',
+            'year.integer' => 'Năm phải là số.',
+            'year.min' => 'Năm phải lớn hơn 2000.',
+            'year.max' => 'Năm phải nhỏ hơn 2100.',
+            'services.required' => 'Dịch vụ là bắt buộc.',
+            'services.array' => 'Dịch vụ phải là mảng.',
+            'services.*.room_service_id.required' => 'ID dịch vụ là bắt buộc.',
+            'services.*.room_service_id.exists' => 'ID dịch vụ không tồn tại.',
+            'services.*.start_meter.numeric' => 'Giá trị đồng hồ bắt đầu phải là số.',
+            'services.*.end_meter.numeric' => 'Giá trị đồng hồ kết thúc phải là số.',
+            'services.*.usage_value.required' => 'Giá trị sử dụng là bắt buộc.',
+            'services.*.usage_value.numeric' => 'Giá trị sử dụng phải là số.',
+            'services.*.usage_value.min' => 'Giá trị sử dụng phải lớn hơn 0.',
+            'services.*.price_used.required' => 'Giá trị sử dụng phải là số.',
+            'services.*.price_used.integer' => 'Giá trị sử dụng phải là số.',
+            'services.*.price_used.min' => 'Giá trị sử dụng phải lớn hơn 0.',
+            'update_invoice.boolean' => 'Cập nhật hóa đơn phải là true hoặc false.',
+            'unchecked_services.array' => 'Dịch vụ không được chọn phải là mảng.',
+            'unchecked_services.*.exists' => 'ID dịch vụ không tồn tại.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors());
         }
 
         $roomId = $request->room_id;
@@ -243,10 +280,10 @@ class MonthlyServiceController extends BaseController
         if ($user->role->code === 'manager') {
             $managedHouseIds = House::where('manager_id', $user->id)->pluck('id')->toArray();
             if (!in_array($room->house_id, $managedHouseIds)) {
-                return $this->sendError('Unauthorized', ['error' => 'You can only update services for rooms in houses you manage'], 403);
+                return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể cập nhật dịch vụ cho phòng trong nhà trọ mà bạn quản lý'], 403);
             }
         } elseif ($user->role->code !== 'admin') {
-            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to update services'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền cập nhật dịch vụ'], 403);
         }
 
         // Kiểm tra xem đã có hóa đơn cho phòng này trong tháng này chưa
@@ -263,11 +300,6 @@ class MonthlyServiceController extends BaseController
 
             // Xử lý các dịch vụ bị bỏ chọn - xóa service_usage tương ứng
             if (isset($request->unchecked_services) && is_array($request->unchecked_services)) {
-                \Illuminate\Support\Facades\Log::info('Processing unchecked services:', [
-                    'unchecked_count' => count($request->unchecked_services),
-                    'unchecked_services' => $request->unchecked_services
-                ]);
-                
                 foreach ($request->unchecked_services as $roomServiceId) {
                     // Xác minh room_service_id thuộc về phòng này
                     $roomService = RoomService::where('id', $roomServiceId)
@@ -288,24 +320,10 @@ class MonthlyServiceController extends BaseController
                                     ->where('source_type', 'service_usage')
                                     ->where('service_usage_id', $deletedServiceUsage->id)
                                     ->delete();
-                                    
-                                \Illuminate\Support\Facades\Log::info("Deleted invoice items for unchecked service:", [
-                                    'service_usage_id' => $deletedServiceUsage->id,
-                                    'deleted_count' => $deletedInvoiceItems
-                                ]);
                             }
                             
                             // Xóa service_usage
                             $deletedServiceUsage->delete();
-                            
-                            \Illuminate\Support\Facades\Log::info("Deleted service usage for unchecked service:", [
-                                'room_service_id' => $roomServiceId,
-                                'service_usage_id' => $deletedServiceUsage->id
-                            ]);
-                        } else {
-                            \Illuminate\Support\Facades\Log::info("No service usage found to delete:", [
-                                'room_service_id' => $roomServiceId
-                            ]);
                         }
                     }
                 }
@@ -317,7 +335,7 @@ class MonthlyServiceController extends BaseController
 
                 // Validate that this room service belongs to the room
                 if ($roomService->room_id != $roomId) {
-                    throw new \Exception("Room service does not belong to the specified room");
+                    throw new \Exception("Dịch vụ không thuộc phòng đã chọn");
                 }
 
                 // Check if meters are valid for metered services
@@ -326,7 +344,7 @@ class MonthlyServiceController extends BaseController
                         isset($serviceData['start_meter']) && isset($serviceData['end_meter']) &&
                         $serviceData['start_meter'] > $serviceData['end_meter']
                     ) {
-                        throw new \Exception("End meter must be greater than or equal to start meter for service: {$roomService->service->name}");
+                        throw new \Exception("Đồng hồ kết thúc phải lớn hơn hoặc bằng đồng hồ bắt đầu cho dịch vụ: {$roomService->service->name}");
                     }
                 }
 
@@ -365,16 +383,6 @@ class MonthlyServiceController extends BaseController
 
             // Xử lý hóa đơn - nếu đã tồn tại và chọn cập nhật hoặc chưa tồn tại
             if ((!$existingInvoice) || ($existingInvoice && $updateInvoice)) {
-                \Illuminate\Support\Facades\Log::info('Monthly service processing invoice:', [
-                    'room_id' => $roomId,
-                    'month' => $month,
-                    'year' => $year,
-                    'existing_invoice' => $existingInvoice ? $existingInvoice->id : 'none',
-                    'update_invoice' => $updateInvoice,
-                    'total_amount' => $totalAmount,
-                    'saved_services_count' => count($savedServices)
-                ]);
-                
                 if ($existingInvoice) {
                     // Cập nhật hóa đơn hiện có
                     $invoice = $existingInvoice;
@@ -405,7 +413,7 @@ class MonthlyServiceController extends BaseController
                         'updated_by' => $user->id,
                         'payment_method_id' => 1,
                         'payment_status' => 'pending',
-                        'transaction_code' => 'INV-' . \Illuminate\Support\Str::random(8) . '-' . time(),
+                        'transaction_code' => 'INV-' . Str::random(8) . '-' . time(),
                     ]);
                 }
 
@@ -432,28 +440,7 @@ class MonthlyServiceController extends BaseController
                     // Cập nhật tổng tiền
                     $invoice->total_amount = $recalculatedTotal;
                     $invoice->save();
-                    
-                    \Illuminate\Support\Facades\Log::info("Recalculated invoice total amount:", [
-                        'invoice_id' => $invoice->id,
-                        'previous_total' => $invoice->total_amount,
-                        'new_total' => $recalculatedTotal,
-                        'item_count' => InvoiceItem::where('invoice_id', $invoice->id)->count()
-                    ]);
                 }
-
-                // Log thông tin về hóa đơn và các item sau khi cập nhật
-                \Illuminate\Support\Facades\Log::info('Monthly service update - Invoice items after update:', [
-                    'invoice_id' => $invoice->id,
-                    'item_count' => InvoiceItem::where('invoice_id', $invoice->id)->count(),
-                    'manual_items' => InvoiceItem::where('invoice_id', $invoice->id)
-                        ->where('source_type', 'manual')
-                        ->get()
-                        ->toArray(),
-                    'service_items' => InvoiceItem::where('invoice_id', $invoice->id)
-                        ->where('source_type', 'service_usage')
-                        ->get()
-                        ->toArray()
-                ]);
             }
 
             DB::commit();
@@ -463,10 +450,10 @@ class MonthlyServiceController extends BaseController
                 'invoice' => $invoice ? $invoice->load('items') : null,
                 'count' => count($savedServices),
                 'updated_invoice' => $updateInvoice && $existingInvoice !== null
-            ], 'Room service usages saved' . ($updateInvoice ? ' and invoice updated' : '') . ' successfully.');
+            ], 'Dịch vụ đã được lưu' . ($updateInvoice ? ' và hóa đơn đã được cập nhật' : '') . ' thành công.');
         } catch (\Exception $e) {
             DB::rollback();
-            return $this->sendError('Error saving service usages', ['error' => $e->getMessage()]);
+            return $this->sendError('Lỗi lưu dịch vụ', ['error' => $e->getMessage()]);
         }
     }
 
@@ -482,11 +469,11 @@ class MonthlyServiceController extends BaseController
         } elseif ($user->role->code === 'admin') {
             $houses = House::all();
         } else {
-            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to access this resource'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền truy cập vào tài nguyên này'], 403);
         }
 
         return $this->sendResponse([
             'houses' => $houses
-        ], 'Available houses retrieved successfully.');
+        ], 'Nhà trọ khả dụng đã được lấy thành công.');
     }
 }

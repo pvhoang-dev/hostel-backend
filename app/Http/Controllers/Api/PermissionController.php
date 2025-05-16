@@ -93,16 +93,19 @@ class PermissionController extends BaseController
             'code' => 'required|unique:permissions,code',
             'description' => 'nullable'
         ], [
-            'code.unique' => 'Permission code already exists.',
+            'name.required' => 'Tên quyền hạn là bắt buộc.',
+            'code.unique' => 'Mã quyền hạn đã tồn tại.',
+            'code.required' => 'Mã quyền hạn là bắt buộc.',
+            'description.nullable' => 'Mô tả quyền hạn có thể là null.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
+            return $this->sendError('Lỗi dữ liệu.', $validator->errors());
         }
 
         $permission = Permission::create($input);
 
-        return $this->sendResponse(new PermissionResource($permission), 'Permission created successfully.');
+        return $this->sendResponse(new PermissionResource($permission), 'Quyền hạn đã được tạo thành công.');
     }
 
     /**

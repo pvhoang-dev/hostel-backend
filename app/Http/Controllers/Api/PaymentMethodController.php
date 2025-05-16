@@ -106,7 +106,7 @@ class PaymentMethodController extends BaseController
 
         // Only admins can create payment methods
         if ($user->role->code !== 'admin') {
-            return $this->sendError('Unauthorized', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
         }
 
         $input = $httpRequest->all();
@@ -144,7 +144,7 @@ class PaymentMethodController extends BaseController
 
         // Only admin and manager can view payment method details
         if (!$user || !in_array($user->role->code, ['admin', 'manager'])) {
-            return $this->sendError('Unauthorized', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
         }
 
         $paymentMethod = PaymentMethod::find($id);
@@ -155,7 +155,7 @@ class PaymentMethodController extends BaseController
 
         // For non-admin users, only allow viewing active payment methods
         if ($user->role->code !== 'admin' && $paymentMethod->status !== 'active') {
-            return $this->sendError('Unauthorized', ['error' => 'Bạn không có quyền xem phương thức thanh toán này'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền xem phương thức thanh toán này'], 403);
         }
 
         return $this->sendResponse(
@@ -173,7 +173,7 @@ class PaymentMethodController extends BaseController
 
         // Only admins can update payment methods
         if ($user->role->code !== 'admin') {
-            return $this->sendError('Unauthorized', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
         }
 
         $paymentMethod = PaymentMethod::find($id);
@@ -218,7 +218,7 @@ class PaymentMethodController extends BaseController
 
         // Only admins can delete payment methods
         if ($user->role->code !== 'admin') {
-            return $this->sendError('Unauthorized', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
+            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền thực hiện thao tác này'], 403);
         }
 
         $paymentMethod = PaymentMethod::find($id);
