@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\ServiceUsageController;
 use App\Http\Controllers\Api\StorageController;
 use App\Http\Controllers\Api\SystemSettingController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\ConfigController;
 use Illuminate\Support\Facades\Route;
 
 Route::controller(AuthController::class)->group(function () {
@@ -80,6 +81,10 @@ Route::middleware('auth:sanctum')->group(function () {
     // Payment Gateway
     Route::post('/payment/create-link-payment', [InvoiceController::class, 'createPayosPayment']);
     Route::post('/payment/receive-hook', [InvoiceController::class, 'verifyPayosPayment']);
+
+    // Config Management
+    Route::resource('configs', ConfigController::class);
+    Route::get('/configs/group/payos', [ConfigController::class, 'getPayosConfigs']);
 
     // Payment Methods
     Route::resource('payment-methods', PaymentMethodController::class);

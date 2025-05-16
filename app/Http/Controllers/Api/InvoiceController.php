@@ -701,11 +701,11 @@ class InvoiceController extends BaseController
                 'cancelUrl' => $cancelUrl
             ];
             
-            // Khởi tạo SDK PayOS
+            // Khởi tạo SDK PayOS với cấu hình từ database
             $payos = new PayOS(
-                config('services.payos.client_id'),
-                config('services.payos.api_key'),
-                config('services.payos.checksum_key')
+                payos_config('client_id'),
+                payos_config('api_key'),
+                payos_config('checksum_key')
             );
             
             // Tạo payment link thật từ PayOS
