@@ -28,7 +28,7 @@ class RoomEquipmentController extends BaseController
             });
         } elseif ($user->role->code === 'tenant') {
             // Tenants can only see equipment in rooms they occupy
-            $query->whereHas('room.contracts.tenants', function ($q) use ($user) {
+            $query->whereHas('room.contracts.users', function ($q) use ($user) {
                 $q->where('users.id', $user->id);
             });
         }

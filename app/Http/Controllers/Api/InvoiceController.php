@@ -28,7 +28,7 @@ class InvoiceController extends BaseController
         // Apply role-based filters
         if ($user->role->code === 'tenant') {
             // Tenants can only see invoices for rooms they occupy
-            $query->whereHas('room.contracts.tenants', function ($q) use ($user) {
+            $query->whereHas('room.contracts.users', function ($q) use ($user) {
                 $q->where('users.id', $user->id);
             });
         } elseif ($user->role->code === 'manager') {

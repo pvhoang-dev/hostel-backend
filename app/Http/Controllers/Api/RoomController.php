@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Auth;
 
 class RoomController extends BaseController
 {
@@ -21,14 +22,32 @@ class RoomController extends BaseController
      */
     public function index(Request $request): JsonResponse
     {
-        $user = auth()->user();
+        $user = Auth::user();
         $query = Room::query();
 
         // Apply role-based filters
-        if ($user && $user->role->code === 'manager') {
-            // Managers can only see rooms in houses they manage
-            $managedHouseIds = House::where('manager_id', $user->id)->pluck('id');
-            $query->whereIn('house_id', $managedHouseIds);
+        if ($user) {
+            if ($user->role->code === 'manager') {
+                // Managers can only see rooms in houses they manage
+                $managedHouseIds = House::where('manager_id', $user->id)->pluck('id');
+                $query->whereIn('house_id', $managedHouseIds);
+            } elseif ($user->role->code === 'tenant') {
+                // Tenants can only see rooms they are currently renting through active contracts
+                $activeContractRoomIds = $user->contracts()
+                    ->where('status', 'active')
+                    ->pluck('room_id')
+                    ->toArray();
+                
+                if (empty($activeContractRoomIds)) {
+                    // If tenant doesn't have any active contracts, return empty result
+                    return $this->sendResponse(
+                        ['data' => [], 'meta' => ['current_page' => 1, 'last_page' => 1, 'total' => 0, 'per_page' => 15]],
+                        'No rooms found for this tenant.'
+                    );
+                }
+                
+                $query->whereIn('id', $activeContractRoomIds);
+            }
         }
         // Admins can see all rooms (no filter)
 
@@ -122,7 +141,7 @@ class RoomController extends BaseController
      */
     public function store(Request $request): JsonResponse
     {
-        $currentUser = auth()->user();
+        $currentUser = Auth::user();
         if (!$currentUser) {
             return $this->sendError('Unauthorized.', [], 401);
         }
@@ -165,10 +184,24 @@ class RoomController extends BaseController
      */
     public function show(string $id): JsonResponse
     {
+        $user = Auth::user();
         $room = Room::with(['house'])->find($id);
 
         if (is_null($room)) {
             return $this->sendError('Room not found.');
+        }
+
+        // Kiểm tra quyền truy cập
+        if ($user && $user->role->code === 'tenant') {
+            // Tenant chỉ có thể xem phòng của họ thông qua hợp đồng active
+            $hasActiveContract = $user->contracts()
+                ->where('status', 'active')
+                ->where('room_id', $id)
+                ->exists();
+                
+            if (!$hasActiveContract) {
+                return $this->sendError('Unauthorized. You can only view your own room.', [], 403);
+            }
         }
 
         return $this->sendResponse(new RoomResource($room), 'Room retrieved successfully.');
@@ -189,7 +222,7 @@ class RoomController extends BaseController
             return $this->sendError('Room not found.');
         }
 
-        $currentUser = auth()->user();
+        $currentUser = Auth::user();
         if (!$currentUser) {
             return $this->sendError('Unauthorized.', [], 401);
         }
@@ -251,7 +284,7 @@ class RoomController extends BaseController
             return $this->sendError('Room not found.');
         }
 
-        $currentUser = auth()->user();
+        $currentUser = Auth::user();
         if (!$currentUser) {
             return $this->sendError('Unauthorized.', [], 401);
         }
