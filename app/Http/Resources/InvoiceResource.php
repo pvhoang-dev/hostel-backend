@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use App\Http\Resources\RoomResource;
 use App\Http\Resources\InvoiceItemResource;
-use App\Http\Resources\TransactionResource;
+use App\Http\Resources\PaymentMethodResource;
 use App\Http\Resources\UserResource;
 
 class InvoiceResource extends JsonResource
@@ -24,7 +24,10 @@ class InvoiceResource extends JsonResource
             'creator'        => new UserResource($this->whenLoaded('creator')),
             'updater'        => new UserResource($this->whenLoaded('updater')),
             'items'          => InvoiceItemResource::collection($this->whenLoaded('items')),
-            'transactions'   => TransactionResource::collection($this->whenLoaded('transactions')),
+            'payment_method' => new PaymentMethodResource($this->whenLoaded('paymentMethod')),
+            'transaction_code' => $this->transaction_code,
+            'payment_status' => $this->payment_status,
+            'payment_date' => $this->payment_date,
             'created_at'     => $this->created_at->format('h:m:s d/m/Y'),
             'updated_at'     => $this->updated_at->format('h:m:s d/m/Y'),
         ];

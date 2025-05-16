@@ -25,7 +25,7 @@ class ServiceUsageController extends BaseController
         // Apply role-based filters
         if ($user->role->code === 'tenant') {
             // Tenants can only see service usages for rooms they occupy
-            $query->whereHas('roomService.room.contracts.tenants', function ($q) use ($user) {
+            $query->whereHas('roomService.room.contracts.users', function ($q) use ($user) {
                 $q->where('users.id', $user->id);
             });
         } elseif ($user->role->code === 'manager') {
@@ -318,7 +318,7 @@ class ServiceUsageController extends BaseController
         // Tenants can only access service usages for rooms they occupy
         if ($user->role->code === 'tenant') {
             return $serviceUsage->roomService->room->contracts()
-                ->whereHas('tenants', function ($q) use ($user) {
+                ->whereHas('users', function ($q) use ($user) {
                     $q->where('users.id', $user->id);
                 })
                 ->exists();

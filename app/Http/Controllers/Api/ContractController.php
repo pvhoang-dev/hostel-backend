@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Resources\ContractResource;
+use App\Http\Resources\UserResource;
 use App\Models\Contract;
 use App\Models\ContractUser;
 use App\Models\Room;
@@ -45,6 +46,12 @@ class ContractController extends BaseController
 
         if ($request->has('status')) {
             $query->where('status', $request->status);
+        }
+
+        if ($request->has('house_id')) {
+            $query->whereHas('room', function ($q) use ($request) {
+                $q->where('house_id', $request->house_id);
+            });
         }
 
         if ($request->has('room_id')) {
@@ -174,6 +181,11 @@ class ContractController extends BaseController
                 ]);
             }
 
+            // Nếu hợp đồng có trạng thái active, cập nhật phòng thành used
+            if ($contract->status === 'active') {
+                Room::where('id', $contract->room_id)->update(['status' => 'used']);
+            }
+
             DB::commit();
 
             $contract->load(['room', 'users', 'creator']);
@@ -196,7 +208,7 @@ class ContractController extends BaseController
             return $this->sendError('Unauthorized.', [], 401);
         }
 
-        $contract = Contract::with(['room', 'creator', 'users', 'updater'])->find($id);
+        $contract = Contract::with(['room.house', 'creator', 'users', 'updater'])->find($id);
 
         if (is_null($contract)) {
             return $this->sendError('Contract not found.', [], 404);
@@ -265,9 +277,10 @@ class ContractController extends BaseController
         try {
             DB::beginTransaction();
 
-            $input = $request->except('user_ids');
+            $input = $request->except(['user_ids', 'created_by']);
             $input['updated_by'] = $currentUser->id;
 
+            $oldStatus = $contract->status;
             $contract->update($input);
 
             if ($request->has('user_ids')) {
@@ -278,6 +291,23 @@ class ContractController extends BaseController
                         'contract_id' => $contract->id,
                         'user_id' => $userId
                     ]);
+                }
+            }
+
+            // Nếu trạng thái hợp đồng thay đổi thành active, cập nhật phòng thành used
+            if ($contract->status === 'active' && $oldStatus !== 'active') {
+                Room::where('id', $contract->room_id)->update(['status' => 'used']);
+            }
+            // Nếu trạng thái hợp đồng thay đổi từ active sang trạng thái khác, cập nhật phòng thành available
+            elseif ($oldStatus === 'active' && $contract->status !== 'active') {
+                // Kiểm tra nếu không còn hợp đồng active nào khác cho phòng này
+                $activeContractsCount = Contract::where('room_id', $contract->room_id)
+                    ->where('id', '!=', $contract->id)
+                    ->where('status', 'active')
+                    ->count();
+                
+                if ($activeContractsCount === 0) {
+                    Room::where('id', $contract->room_id)->update(['status' => 'available']);
                 }
             }
 
@@ -316,8 +346,80 @@ class ContractController extends BaseController
             return $this->sendError('Unauthorized. You can only manage contracts for properties you manage.', [], 403);
         }
 
-        $contract->delete();
+        try {
+            DB::beginTransaction();
+            
+            // Lưu trạng thái hợp đồng và room_id trước khi xóa
+            $wasActive = $contract->status === 'active';
+            $roomId = $contract->room_id;
+            
+            // Xóa hợp đồng
+            $contract->delete();
+            
+            // Nếu hợp đồng là active, kiểm tra xem còn hợp đồng active nào cho phòng này không
+            if ($wasActive) {
+                $activeContractsCount = Contract::where('room_id', $roomId)
+                    ->where('status', 'active')
+                    ->count();
+                
+                // Nếu không còn hợp đồng active nào, cập nhật phòng thành available
+                if ($activeContractsCount === 0) {
+                    Room::where('id', $roomId)->update(['status' => 'available']);
+                }
+            }
+            
+            DB::commit();
+            
+            return $this->sendResponse([], 'Contract deleted successfully.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return $this->sendError('Contract deletion failed.', ['error' => $e->getMessage()], 500);
+        }
+    }
 
-        return $this->sendResponse([], 'Contract deleted successfully.');
+    /**
+     * Get available tenants for a room
+     */
+    public function getAvailableTenants(Request $request): JsonResponse
+    {
+        $currentUser = auth()->user();
+        if (!$currentUser) {
+            return $this->sendError('Unauthorized.', [], 401);
+        }
+        
+        if ($currentUser->role->code === 'tenant') {
+            return $this->sendError('Unauthorized. As a tenant, you cannot access this resource.', [], 403);
+        }
+        
+        $validator = Validator::make($request->all(), [
+            'room_id' => 'required|exists:rooms,id',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->sendError('Validation Error.', $validator->errors(), 422);
+        }
+        
+        // Kiểm tra quyền truy cập phòng
+        if (!$this->isAuthorizedForRoom($request->room_id)) {
+            return $this->sendError('Unauthorized. You can only access rooms you manage.', [], 403);
+        }
+        
+        // Tạo query cơ bản
+        $query = \App\Models\User::whereHas('role', function($query) {
+            $query->where('code', 'tenant');
+        });
+        
+        // Chỉ lấy người không có hợp đồng active
+        $query->whereDoesntHave('contracts', function($query) {
+            $query->where('status', 'active');
+        });
+        
+        // Lấy danh sách người thuê
+        $tenants = $query->with('role')->get();
+        
+        return $this->sendResponse(
+            UserResource::collection($tenants),
+            'Available tenants retrieved successfully.'
+        );
     }
 }

@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\EquipmentController;
 use App\Http\Controllers\Api\HouseController;
 use App\Http\Controllers\Api\HouseSettingController;
 use App\Http\Controllers\Api\InvoiceController;
+use App\Http\Controllers\Api\MonthlyServiceController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PaymentMethodController;
 use App\Http\Controllers\Api\PermissionController;
@@ -20,7 +21,6 @@ use App\Http\Controllers\Api\ServiceController;
 use App\Http\Controllers\Api\ServiceUsageController;
 use App\Http\Controllers\Api\StorageController;
 use App\Http\Controllers\Api\SystemSettingController;
-use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -67,6 +67,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Contracts
     Route::resource('contracts', ContractController::class);
+    Route::get('/available-tenants', [ContractController::class, 'getAvailableTenants']);
 
     // Requests
     Route::resource('requests', RequestController::class);
@@ -74,10 +75,18 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Invoices
     Route::resource('invoices', InvoiceController::class);
+    Route::post('/invoices/{id}/update-payment', [InvoiceController::class, 'updatePaymentStatus']);
+    
+    // Payment Gateway
+    Route::post('/payment/create-link-payment', [InvoiceController::class, 'createPayosPayment']);
+    Route::post('/payment/receive-hook', [InvoiceController::class, 'verifyPayosPayment']);
 
     // Payment Methods
     Route::resource('payment-methods', PaymentMethodController::class);
 
-    // Transactions
-    Route::resource('transactions', TransactionController::class);
+    // Monthly Service Management
+    Route::get('/monthly-services/houses', [MonthlyServiceController::class, 'getAvailableHouses']);
+    Route::get('/monthly-services/rooms', [MonthlyServiceController::class, 'getRoomsNeedingUpdate']);
+    Route::get('/monthly-services/rooms/{roomId}', [MonthlyServiceController::class, 'getRoomServices']);
+    Route::post('/monthly-services/save', [MonthlyServiceController::class, 'saveRoomServiceUsage']);
 });

@@ -35,4 +35,12 @@ return [
         ],
     ],
 
+    'payos' => [
+        'client_id' => env('PAYOS_CLIENT_ID'),
+        'api_key' => env('PAYOS_API_KEY'),
+        'checksum_key' => env('PAYOS_CHECKSUM_KEY'),
+        'base_url' => env('PAYOS_BASE_URL', 'https://api-sandbox.payos.vn'),
+        'checkout_url' => env('PAYOS_CHECKOUT_URL', 'https://checkout-sandbox.payos.vn'),
+        'sandbox' => env('PAYOS_SANDBOX', true),
+    ],
 ];

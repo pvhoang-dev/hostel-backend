@@ -11,7 +11,6 @@ return new class extends Migration {
             $table->id();
             $table->unsignedBigInteger('equipment_id');
             $table->unsignedBigInteger('room_id');
-            $table->enum('source', ['storage', 'custom']);
             $table->integer('quantity');
             $table->integer('price');
             $table->text('description')->nullable();

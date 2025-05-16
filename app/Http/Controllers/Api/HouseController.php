@@ -25,17 +25,38 @@ class HouseController extends BaseController
             return $this->sendError('Unauthorized', ['error' => 'Bạn cần đăng nhập để thực hiện thao tác này'], 401);
         }
 
-        // Check if user is admin or manager
-        if (!in_array($user->role->code, ['admin', 'manager'])) {
-            return $this->sendError('Forbidden', ['error' => 'Chỉ quản trị viên hoặc quản lý mới có quyền xem danh sách nhà trọ'], 403);
-        }
-
+        // Khởi tạo query
         $query = House::query();
 
-        // If manager, only show houses they manage
+        // Phân quyền dựa trên vai trò
         if ($user->role->code === 'manager') {
+            // Manager chỉ thấy nhà họ quản lý
             $query->where('manager_id', $user->id);
+        } elseif ($user->role->code === 'tenant') {
+            // Tenant chỉ thấy nhà họ đang thuê thông qua hợp đồng active
+            $housesOfTenant = House::whereHas('rooms', function($q) use ($user) {
+                $q->whereHas('contracts', function($q2) use ($user) {
+                    $q2->where('status', 'active')
+                      ->whereHas('users', function($q3) use ($user) {
+                          $q3->where('users.id', $user->id);
+                      });
+                });
+            });
+            
+            // Lấy các house_id mà tenant có hợp đồng active
+            $houseIds = $housesOfTenant->pluck('id')->toArray();
+            
+            if (empty($houseIds)) {
+                // Nếu không có nhà nào, trả về kết quả rỗng
+                return $this->sendResponse(
+                    ['data' => [], 'meta' => ['current_page' => 1, 'last_page' => 1, 'total' => 0, 'per_page' => 15]],
+                    'No houses found for this tenant.'
+                );
+            }
+            
+            $query->whereIn('id', $houseIds);
         }
+        // Admin có thể xem tất cả nhà
 
         // Filter by name
         if ($request->has('name')) {
@@ -162,14 +183,9 @@ class HouseController extends BaseController
      */
     public function show(string $id): JsonResponse
     {
-        $currentUser = Auth::user();
-        if (!$currentUser) {
+        $user = Auth::user();
+        if (!$user) {
             return $this->sendError('Unauthorized', ['error' => 'Bạn cần đăng nhập để thực hiện thao tác này'], 401);
-        }
-
-        // Check if user is admin or manager
-        if (!in_array($currentUser->role->code, ['admin', 'manager'])) {
-            return $this->sendError('Forbidden', ['error' => 'Chỉ quản trị viên hoặc quản lý mới có quyền xem thông tin nhà trọ'], 403);
         }
 
         $house = House::with(['manager', 'updater'])->find($id);
@@ -178,8 +194,25 @@ class HouseController extends BaseController
             return $this->sendError('Không tìm thấy nhà trọ.');
         }
 
-        // If manager, check if they manage this house
-        if ($currentUser->role->code === 'manager' && $house->manager_id !== $currentUser->id) {
+        // Kiểm tra quyền truy cập
+        if ($user->role->code === 'tenant') {
+            // Tenant chỉ có thể xem nhà của mình thông qua hợp đồng active
+            $hasAccess = House::where('id', $id)
+                ->whereHas('rooms', function($q) use ($user) {
+                    $q->whereHas('contracts', function($q2) use ($user) {
+                        $q2->where('status', 'active')
+                          ->whereHas('users', function($q3) use ($user) {
+                              $q3->where('users.id', $user->id);
+                          });
+                    });
+                })
+                ->exists();
+                
+            if (!$hasAccess) {
+                return $this->sendError('Forbidden', ['error' => 'Bạn không có quyền xem thông tin nhà trọ này'], 403);
+            }
+        } elseif ($user->role->code === 'manager' && $house->manager_id !== $user->id) {
+            // Manager chỉ được xem nhà họ quản lý
             return $this->sendError('Forbidden', ['error' => 'Bạn không có quyền xem thông tin nhà trọ này'], 403);
         }
 

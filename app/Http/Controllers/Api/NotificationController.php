@@ -188,9 +188,13 @@ class NotificationController extends BaseController
 
         // If manager, check if they can create notifications for this user
         if ($isManager && $input['user_id'] != $currentUser->id) {
-            // Managers can only create notifications for tenants they manage
-            if (!$this->isTenantManagedByManager($input['user_id'], $currentUser->id)) {
-                return $this->sendError('You can only create notifications for tenants you manage.', [], 403);
+            // Lấy thông tin người dùng để kiểm tra role
+            $targetUser = User::find($input['user_id']);
+            $isTargetAdmin = $targetUser && $targetUser->role->code === 'admin';
+            
+            // Managers có thể tạo thông báo cho admin hoặc tenant họ quản lý
+            if (!$isTargetAdmin && !$this->isTenantManagedByManager($input['user_id'], $currentUser->id)) {
+                return $this->sendError('You can only create notifications for admins or tenants you manage.', [], 403);
             }
         }
 

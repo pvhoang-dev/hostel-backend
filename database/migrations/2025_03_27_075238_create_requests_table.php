@@ -9,7 +9,6 @@ return new class extends Migration {
     {
         Schema::create('requests', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('room_id');
             $table->unsignedBigInteger('sender_id');
             $table->unsignedBigInteger('recipient_id');
             $table->string('request_type', 50);
@@ -19,7 +18,6 @@ return new class extends Migration {
             $table->timestamps();
             $table->softDeletes();
 
-            $table->foreign('room_id')->references('id')->on('rooms');
             $table->foreign('sender_id')->references('id')->on('users');
             $table->foreign('recipient_id')->references('id')->on('users');
             $table->foreign('updated_by')->references('id')->on('users');

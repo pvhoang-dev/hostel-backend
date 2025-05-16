@@ -8,6 +8,7 @@ use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 
@@ -21,36 +22,96 @@ class UserController extends BaseController
      */
     public function index(Request $request): JsonResponse
     {
-        $currentUser = auth()->user();
+        $currentUser = Auth::user();
         $query = User::query();
+
+        // Check if this is a request to get recipients for creating requests
+        $isForRequestRecipients = $request->has('for_requests') && $request->for_requests === 'true';
 
         // Apply role-based access control
         if ($currentUser->role?->code === 'admin') {
-            // Admin can see all users, no filter needed
+            // Admin có thể thấy tất cả người dùng
+            if ($isForRequestRecipients) {
+                // Không cần lọc cho admin khi họ tạo request
+                // Admin có thể gửi cho bất kỳ ai
+            }
+            // Không filter gì cả, admin thấy tất cả
         } elseif ($currentUser->role?->code === 'manager') {
-            // Manager can see their own profile and tenants from houses they manage
-
-            // Get all houses managed by this manager
-            $managedHouseIds = $currentUser->housesManaged()->pluck('id')->toArray();
-
-            $query->where(function ($q) use ($currentUser, $managedHouseIds) {
-                // Manager can see their own profile
-                $q->where('id', $currentUser->id)
-                    // Or tenants from contracts in rooms of houses they manage
-                    ->orWhere(function ($q2) use ($managedHouseIds) {
+            // Nếu đây là yêu cầu lấy danh sách người nhận cho Request
+            if ($isForRequestRecipients) {
+                // Cho phép manager lấy tất cả admin và tenant từ nhà họ quản lý
+                $managedHouseIds = $currentUser->housesManaged()->pluck('id')->toArray();
+                
+                $query->where(function ($q) use ($currentUser, $managedHouseIds) {
+                    // Manager có thể thấy admin
+                    $q->whereHas('role', function ($roleQuery) {
+                        $roleQuery->where('code', 'admin');
+                    })
+                    // Hoặc tenant từ nhà họ quản lý
+                    ->orWhere(function ($q2) use ($managedHouseIds, $currentUser) {
                         $q2->whereHas('role', function ($roleQuery) {
                             $roleQuery->where('code', 'tenant');
                         })
-                            ->whereHas('contracts', function ($contractQuery) use ($managedHouseIds) {
-                                $contractQuery->whereHas('room', function ($roomQuery) use ($managedHouseIds) {
-                                    $roomQuery->whereIn('house_id', $managedHouseIds);
-                                });
+                        ->whereHas('contracts', function ($contractQuery) use ($managedHouseIds) {
+                            $contractQuery->whereHas('room', function ($roomQuery) use ($managedHouseIds) {
+                                $roomQuery->whereIn('house_id', $managedHouseIds);
                             });
+                        });
                     });
-            });
+                });
+            } else {
+                // Logic thông thường cho manager khi không phải lấy danh sách người nhận
+                // Manager can see their own profile and tenants from houses they manage
+                $managedHouseIds = $currentUser->housesManaged()->pluck('id')->toArray();
+
+                $query->where(function ($q) use ($currentUser, $managedHouseIds) {
+                    // Manager can see their own profile
+                    $q->where('id', $currentUser->id)
+                        // Or tenants from contracts in rooms of houses they manage
+                        ->orWhere(function ($q2) use ($managedHouseIds) {
+                            $q2->whereHas('role', function ($roleQuery) {
+                                $roleQuery->where('code', 'tenant');
+                            })
+                                ->whereHas('contracts', function ($contractQuery) use ($managedHouseIds) {
+                                    $contractQuery->whereHas('room', function ($roomQuery) use ($managedHouseIds) {
+                                        $roomQuery->whereIn('house_id', $managedHouseIds);
+                                    });
+                                });
+                        });
+                });
+            }
         } else {
-            // Other users (tenants) can only see their own profile
-            $query->where('id', $currentUser->id);
+            // Logic cho tenant
+            if ($isForRequestRecipients) {
+                // Đơn giản hóa truy vấn để tenant dễ tìm thấy manager
+                // Tìm tất cả manager quản lý nhà mà tenant đang có hợp đồng
+                $contracts = $currentUser->contracts()->where('status', 'active')->with('room.house')->get();
+                $houseIds = [];
+                
+                // Lấy tất cả house_id mà tenant đang ở
+                foreach($contracts as $contract) {
+                    if ($contract->room && $contract->room->house) {
+                        $houseIds[] = $contract->room->house->id;
+                    }
+                }
+                
+                // Lấy tất cả manager quản lý các nhà đó
+                $query->whereHas('role', function ($roleQuery) {
+                    $roleQuery->where('code', 'manager');
+                })
+                ->whereHas('housesManaged', function ($houseQuery) use ($houseIds) {
+                    $houseQuery->whereIn('id', $houseIds);
+                });
+                
+                // Debug log nếu cần thiết
+                \Illuminate\Support\Facades\Log::info('Tenant looking for managers', [
+                    'tenant_id' => $currentUser->id,
+                    'house_ids' => $houseIds
+                ]);
+            } else {
+                // Other users (tenants) can only see their own profile
+                $query->where('id', $currentUser->id);
+            }
         }
 
         // Apply filters
@@ -108,7 +169,7 @@ class UserController extends BaseController
         }
 
         if ($request->has('role')) {
-            $roleCodes = explode(',', $request->role);
+            $roleCodes = is_array($request->role) ? $request->role : explode(',', $request->role);
             $query->whereHas('role', function ($query) use ($roleCodes) {
                 $query->whereIn('code', $roleCodes);
             });
@@ -120,6 +181,52 @@ class UserController extends BaseController
             $includes = explode(',', $request->include);
             if (in_array('contracts', $includes)) $with[] = 'contracts';
             if (in_array('managedHouses', $includes)) $with[] = 'housesManaged';
+            
+            // Thêm mới: Bao gồm phòng và nhà cho request
+            if (in_array('house', $includes) || in_array('room', $includes)) {
+                // Đối với ứng dụng lấy thông tin cho request form, luôn load đầy đủ dữ liệu
+                if ($request->has('for_requests') && $request->for_requests === 'true') {
+                    // Load hợp đồng đang active cho tenant
+                    $query->with(['contracts' => function($q) {
+                        $q->where('status', 'active');
+                    }]);
+                    
+                    // Load thông tin phòng và nhà từ contract
+                    $query->with(['contracts.room.house']);
+                    
+                    // Load thông tin nhà đang quản lý cho manager
+                    $query->with(['housesManaged']);
+                    
+                    // Đảm bảo eager load nested relationship cho cả admin và manager
+                    if ($currentUser->role?->code === 'admin' || $currentUser->role?->code === 'manager') {
+                        // Nếu đang lấy thông tin để hiển thị trong form request, lấy đầy đủ thông tin
+                        $query->where(function($q) {
+                            // Lấy tenant với thông tin phòng và nhà
+                            $q->whereHas('role', function($roleQ) {
+                                $roleQ->where('code', 'tenant');
+                            })->with(['contracts' => function($contractQ) {
+                                $contractQ->where('status', 'active')
+                                          ->with('room.house');
+                            }])
+                            // Hoặc lấy manager với thông tin nhà
+                            ->orWhereHas('role', function($roleQ) {
+                                $roleQ->where('code', 'manager');
+                            })->with('housesManaged')
+                            // Hoặc lấy admin
+                            ->orWhereHas('role', function($roleQ) {
+                                $roleQ->where('code', 'admin');
+                            });
+                        });
+                    }
+                }
+            }
+        }
+
+        // Lọc người dùng không có hợp đồng active
+        if ($request->has('without_active_contract') && $request->without_active_contract === 'true') {
+            $query->whereDoesntHave('contracts', function ($query) {
+                $query->where('status', 'active');
+            });
         }
 
         // Sorting
@@ -151,7 +258,7 @@ class UserController extends BaseController
      */
     public function store(Request $request): JsonResponse
     {
-        $currentUser = auth()->user();
+        $currentUser = Auth::user();
         $input = $request->all();
 
         // Tenants cannot create users
@@ -215,7 +322,7 @@ class UserController extends BaseController
      */
     public function show(string $id): JsonResponse
     {
-        $currentUser = auth()->user();
+        $currentUser = Auth::user();
         $user = User::with('role')->find($id);
 
         if (is_null($user)) {
@@ -267,7 +374,7 @@ class UserController extends BaseController
     public function update(Request $request, string $id): JsonResponse
     {
         $user = User::find($id);
-        $currentUser = auth()->user();
+        $currentUser = Auth::user();
 
         if (is_null($user)) {
             return $this->sendError('User not found.');
@@ -372,7 +479,7 @@ class UserController extends BaseController
      */
     public function destroy(string $id): JsonResponse
     {
-        $currentUser = auth()->user();
+        $currentUser = Auth::user();
         $user = User::find($id);
 
         if (is_null($user)) {
@@ -426,7 +533,7 @@ class UserController extends BaseController
             return $this->sendError('User not found.', [], 404);
         }
 
-        $currentUser = auth()->user();
+        $currentUser = Auth::user();
         $isAdmin = $currentUser->role->code === 'admin';
 
         if ($currentUser->id !== $user->id && !$isAdmin) {
