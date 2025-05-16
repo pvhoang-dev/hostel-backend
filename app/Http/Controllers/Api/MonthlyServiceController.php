@@ -9,7 +9,6 @@ use App\Models\RoomService;
 use App\Models\ServiceUsage;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
-use App\Models\Transaction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -363,7 +362,6 @@ class MonthlyServiceController extends BaseController
             }
 
             $invoice = null;
-            $transaction = null;
 
             // Xử lý hóa đơn - nếu đã tồn tại và chọn cập nhật hoặc chưa tồn tại
             if ((!$existingInvoice) || ($existingInvoice && $updateInvoice)) {
@@ -405,6 +403,9 @@ class MonthlyServiceController extends BaseController
                         'description' => "Hóa đơn dịch vụ tháng $month/$year",
                         'created_by' => $user->id,
                         'updated_by' => $user->id,
+                        'payment_method_id' => 1,
+                        'payment_status' => 'pending',
+                        'transaction_code' => 'INV-' . \Illuminate\Support\Str::random(8) . '-' . time(),
                     ]);
                 }
 
@@ -453,26 +454,6 @@ class MonthlyServiceController extends BaseController
                         ->get()
                         ->toArray()
                 ]);
-
-                // Kiểm tra xem đã có transaction cho hóa đơn này chưa
-                $existingTransaction = Transaction::where('invoice_id', $invoice->id)->first();
-
-                if ($existingTransaction) {
-                    // Cập nhật transaction hiện có
-                    $existingTransaction->amount = $totalAmount;
-                    $existingTransaction->save();
-                    $transaction = $existingTransaction;
-                } else if (!$existingInvoice) {
-                    // Chỉ tạo transaction mới nếu là hóa đơn mới
-                    $transaction = Transaction::create([
-                        'invoice_id' => $invoice->id,
-                        'payment_method_id' => 1, // ID của payment method mặc định
-                        'amount' => $totalAmount,
-                        'transaction_code' => 'TXN-' . Str::random(8) . '-' . time(),
-                        'status' => 'pending',
-                        'payment_date' => now(),
-                    ]);
-                }
             }
 
             DB::commit();
@@ -480,7 +461,6 @@ class MonthlyServiceController extends BaseController
             return $this->sendResponse([
                 'saved_services' => $savedServices,
                 'invoice' => $invoice ? $invoice->load('items') : null,
-                'transaction' => $transaction,
                 'count' => count($savedServices),
                 'updated_invoice' => $updateInvoice && $existingInvoice !== null
             ], 'Room service usages saved' . ($updateInvoice ? ' and invoice updated' : '') . ' successfully.');

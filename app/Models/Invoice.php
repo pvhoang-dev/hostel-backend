@@ -17,7 +17,11 @@ class Invoice extends Model
         'year',
         'description',
         'created_by',
-        'updated_by'
+        'updated_by',
+        'payment_method_id',
+        'transaction_code',
+        'payment_status',
+        'payment_date'
     ];
 
     public function room()
@@ -30,9 +34,9 @@ class Invoice extends Model
         return $this->hasMany(InvoiceItem::class);
     }
 
-    public function transactions()
+    public function paymentMethod()
     {
-        return $this->hasMany(Transaction::class);
+        return $this->belongsTo(PaymentMethod::class);
     }
 
     public function creator()
@@ -45,6 +49,11 @@ class Invoice extends Model
         return $this->belongsTo(User::class, 'updated_by');
     }
 
+    public function getStatusAttribute()
+    {
+        return $this->payment_status;
+    }
+
     protected static function boot()
     {
         parent::boot();
@@ -53,9 +62,6 @@ class Invoice extends Model
             if (!$invoice->isForceDeleting()) {
                 foreach ($invoice->items as $item) {
                     $item->delete();
-                }
-                foreach ($invoice->transactions as $transaction) {
-                    $transaction->delete();
                 }
             }
         });

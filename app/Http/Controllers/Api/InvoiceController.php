@@ -14,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use PayOS\PayOS;
 
 class InvoiceController extends BaseController
 {
@@ -95,21 +96,29 @@ class InvoiceController extends BaseController
             $query->where('total_amount', '<=', $request->max_amount);
         }
 
+        if ($request->has('payment_method_id')) {
+            $query->where('payment_method_id', $request->payment_method_id);
+        }
+
+        if ($request->has('payment_status')) {
+            $query->where('payment_status', $request->payment_status);
+        }
+
         // Include relationships
         $with = [];
         if ($request->has('include')) {
             $includes = explode(',', $request->include);
             if (in_array('room.house', $includes)) $with[] = 'room.house';
             if (in_array('items', $includes)) $with[] = 'items';
-            if (in_array('transactions', $includes)) $with[] = 'transactions';
             if (in_array('creator', $includes)) $with[] = 'creator';
             if (in_array('updater', $includes)) $with[] = 'updater';
+            if (in_array('paymentMethod', $includes)) $with[] = 'paymentMethod';
         }
 
         // Sorting
         $sortField = $request->get('sort_by', 'year');
         $sortDirection = $request->get('sort_dir', 'desc');
-        $allowedSortFields = ['id', 'room_id', 'invoice_type', 'total_amount', 'month', 'year', 'created_at', 'updated_at', 'created_by', 'updated_by'];
+        $allowedSortFields = ['id', 'room_id', 'invoice_type', 'total_amount', 'month', 'year', 'created_at', 'updated_at', 'created_by', 'updated_by', 'payment_method_id', 'payment_date'];
 
         if (in_array($sortField, $allowedSortFields)) {
             $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
@@ -147,6 +156,10 @@ class InvoiceController extends BaseController
             'items.*.service_usage_id' => 'required_if:items.*.source_type,service_usage|exists:service_usage,id|nullable',
             'items.*.amount' => 'required|integer|min:0',
             'items.*.description' => 'sometimes|nullable|string',
+            'payment_method_id' => 'nullable|exists:payment_methods,id',
+            'payment_status' => 'nullable|in:pending,completed,failed,refunded',
+            'payment_date' => isset($input['payment_status']) && $input['payment_status'] === 'completed' ? 'required|date' : 'nullable|date',
+            'transaction_code' => 'nullable|string|max:255|unique:invoices,transaction_code',
         ]);
 
         if ($validator->fails()) {
@@ -227,6 +240,10 @@ class InvoiceController extends BaseController
                 'description' => $input['description'] ?? null,
                 'created_by' => $user->id,
                 'updated_by' => $user->id,
+                'payment_method_id' => $input['payment_method_id'] ?? null,
+                'payment_status' => $input['payment_status'] ?? 'pending',
+                'payment_date' => $input['payment_date'] ?? null,
+                'transaction_code' => $input['transaction_code'] ?? null,
             ]);
 
             // Create invoice items
@@ -257,7 +274,7 @@ class InvoiceController extends BaseController
     public function show(string $id): JsonResponse
     {
         $user = Auth::user();
-        $invoice = Invoice::with(['room.house', 'items.service_usage.roomService.service', 'transactions', 'creator', 'updater'])->find($id);
+        $invoice = Invoice::with(['room.house', 'items.service_usage.roomService.service', 'paymentMethod', 'creator', 'updater'])->find($id);
 
         if (is_null($invoice)) {
             return $this->sendError('Invoice not found.');
@@ -300,12 +317,37 @@ class InvoiceController extends BaseController
             // Bắt đầu transaction
             DB::beginTransaction();
             
-            // Cập nhật mô tả nếu có
+            // Cập nhật thông tin hóa đơn
             if (isset($input['description'])) {
                 $invoice->description = $input['description'];
-                $invoice->updated_by = $user->id;
-                $invoice->save();
             }
+            
+            // Cập nhật thông tin thanh toán nếu có
+            if (isset($input['payment_method_id'])) {
+                $invoice->payment_method_id = $input['payment_method_id'];
+            }
+            
+            if (isset($input['payment_status'])) {
+                $invoice->payment_status = $input['payment_status'];
+                
+                // Nếu trạng thái không phải là completed, đặt ngày thanh toán thành null
+                if ($input['payment_status'] !== 'completed') {
+                    $invoice->payment_date = null;
+                } else if (isset($input['payment_date'])) {
+                    // Nếu trạng thái là completed và có ngày thanh toán, cập nhật ngày
+                    $invoice->payment_date = $input['payment_date'];
+                }
+            } else if (isset($input['payment_date']) && $invoice->payment_status === 'completed') {
+                // Chỉ cập nhật ngày thanh toán nếu trạng thái hiện tại là completed
+                $invoice->payment_date = $input['payment_date'];
+            }
+            
+            if (isset($input['transaction_code'])) {
+                $invoice->transaction_code = $input['transaction_code'];
+            }
+            
+            $invoice->updated_by = $user->id;
+            $invoice->save();
             
             // Trích xuất tất cả ID của các item trong request
             $requestItemIds = [];
@@ -404,6 +446,18 @@ class InvoiceController extends BaseController
             $itemCount = InvoiceItem::where('invoice_id', $invoice->id)->count();
             \Illuminate\Support\Facades\Log::info('Final item count:', ['count' => $itemCount]);
             
+            // Nếu không còn item nào, xóa hóa đơn
+            if ($itemCount === 0) {
+                $invoice->delete();
+                
+                DB::commit();
+                
+                return $this->sendResponse(
+                    [], 
+                    'Invoice đã được xóa do không còn mục nào'
+                );
+            }
+            
             // Tải lại invoice với tất cả quan hệ
             $refreshedInvoice = Invoice::with(['room.house', 'items.service_usage.roomService.service', 'updater'])->find($invoice->id);
             \Illuminate\Support\Facades\Log::info('Refreshed invoice item count:', ['count' => $refreshedInvoice->items->count()]);
@@ -428,7 +482,7 @@ class InvoiceController extends BaseController
     public function destroy(string $id): JsonResponse
     {
         $user = Auth::user();
-        $invoice = Invoice::with(['room.house', 'transactions'])->find($id);
+        $invoice = Invoice::with(['room.house'])->find($id);
 
         if (is_null($invoice)) {
             return $this->sendError('Invoice not found.');
@@ -441,9 +495,6 @@ class InvoiceController extends BaseController
 
         try {
             DB::beginTransaction();
-            
-            // Xóa tất cả giao dịch liên quan trước
-            $invoice->transactions()->delete();
             
             // Sau đó xóa hóa đơn
             $invoice->delete();
@@ -470,7 +521,7 @@ class InvoiceController extends BaseController
         // Tenants can only access invoices for rooms they occupy
         if ($user->role->code === 'tenant') {
             return $invoice->room->contracts()
-                ->whereHas('tenants', function ($q) use ($user) {
+                ->whereHas('users', function ($q) use ($user) {
                     $q->where('users.id', $user->id);
                 })
                 ->exists();
@@ -505,5 +556,260 @@ class InvoiceController extends BaseController
         }
 
         return false;
+    }
+
+    /**
+     * Cập nhật trạng thái thanh toán của hóa đơn
+     */
+    public function updatePaymentStatus(Request $request, string $id): JsonResponse
+    {
+        $user = Auth::user();
+        $invoice = Invoice::with(['room.house'])->find($id);
+        
+        if (is_null($invoice)) {
+            return $this->sendError('Invoice not found.');
+        }
+        
+        // Kiểm tra quyền hạn
+        if (!$this->canManageInvoice($user, $invoice)) {
+            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to update this invoice'], 403);
+        }
+        
+        $validator = Validator::make($request->all(), [
+            'payment_method_id' => 'required|exists:payment_methods,id',
+            'payment_status' => 'required|in:pending,completed,failed,refunded',
+            'payment_date' => $request->payment_status === 'completed' ? 'required|date' : 'nullable|date',
+            'transaction_code' => 'sometimes|string|max:255|unique:invoices,transaction_code,' . $invoice->id,
+        ]);
+        
+        if ($validator->fails()) {
+            return $this->sendError('Validation Error.', $validator->errors());
+        }
+        
+        // Cập nhật thông tin thanh toán
+        $invoice->payment_method_id = $request->payment_method_id;
+        $invoice->payment_status = $request->payment_status;
+        $invoice->payment_date = $request->payment_date;
+        
+        // Tạo mã giao dịch nếu chưa có
+        if (!$invoice->transaction_code && !$request->has('transaction_code')) {
+            $invoice->transaction_code = 'INV-' . substr(uniqid(), -8) . '-' . time();
+        } elseif ($request->has('transaction_code')) {
+            $invoice->transaction_code = $request->transaction_code;
+        }
+        
+        $invoice->updated_by = $user->id;
+        $invoice->save();
+        
+        return $this->sendResponse(
+            new InvoiceResource($invoice->load(['room.house', 'items', 'paymentMethod', 'creator', 'updater'])),
+            'Invoice payment status updated successfully.'
+        );
+    }
+
+    /**
+     * Tạo thanh toán qua cổng Payos
+     */
+    public function createPayosPayment(Request $request): JsonResponse
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return $this->sendError('Unauthorized.', [], 401);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'invoice_ids' => 'required|array',
+            'invoice_ids.*' => 'exists:invoices,id',
+            'amount' => 'required|numeric|min:1000',
+            'description' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->sendError('Validation Error.', $validator->errors(), 422);
+        }
+
+        $invoiceIds = $request->invoice_ids;
+        $amount = $request->amount;
+        $description = $request->description ?? 'Thanh toán HĐ';
+
+        // Kiểm tra quyền truy cập
+        if ($user->role->code === 'tenant') {
+            // Tenant chỉ được thanh toán hóa đơn của chính họ
+            $tenantInvoiceIds = Invoice::whereHas('room', function ($query) use ($user) {
+                $query->whereHas('contracts', function ($q) use ($user) {
+                    $q->where('status', 'active')
+                      ->whereHas('users', function ($q2) use ($user) {
+                          $q2->where('users.id', $user->id);
+                      });
+                });
+            })->pluck('id')->toArray();
+
+            // Kiểm tra xem tất cả các invoice_ids có thuộc về tenant không
+            foreach ($invoiceIds as $invoiceId) {
+                if (!in_array($invoiceId, $tenantInvoiceIds)) {
+                    return $this->sendError('Unauthorized. You can only pay your own invoices.', [], 403);
+                }
+            }
+        }
+
+        try {
+            // Tạo mã đơn hàng duy nhất là một số dương
+            $orderCodeNum = time() . rand(100, 999);
+            
+            // Đảm bảo không vượt quá giới hạn số nguyên an toàn của JavaScript
+            if ($orderCodeNum > 9007199254740991) {
+                $orderCodeNum = substr($orderCodeNum, 0, 15);
+            }
+            
+            // Chuyển thành số nguyên
+            $orderCode = (int)$orderCodeNum;
+            
+            // Lưu lại orderCode gốc để sử dụng trong hệ thống
+            $systemOrderCode = 'INV-' . $orderCode;
+            
+            // URL trả về sau khi thanh toán
+            $returnUrl = config('app.frontend_url') . '/invoice-payment?success=true&orderCode=' . $orderCode . '&invoice_ids=' . implode(',', $invoiceIds);
+            $cancelUrl = config('app.frontend_url') . '/invoice-payment?cancel=true&orderCode=' . $orderCode;
+            
+            // Tạo đơn hàng
+            $order = [
+                'amount' => $amount,
+                'description' => $description,
+                'orderCode' => $orderCode,
+                'returnUrl' => $returnUrl,
+                'cancelUrl' => $cancelUrl
+            ];
+            
+            // Khởi tạo SDK PayOS
+            $payos = new PayOS(
+                config('services.payos.client_id'),
+                config('services.payos.api_key'),
+                config('services.payos.checksum_key')
+            );
+            
+            // Tạo payment link thật từ PayOS
+            $paymentLink = $payos->createPaymentLink($order);
+            
+            if (!$paymentLink) {
+                throw new \Exception('Không thể tạo liên kết thanh toán');
+            }
+            
+            // Trả về thông tin thanh toán
+            return $this->sendResponse(
+                [
+                    'checkoutUrl' => $paymentLink['checkoutUrl'],
+                    'orderCode' => $orderCode,
+                    'systemOrderCode' => $systemOrderCode,
+                    'qrCode' => $paymentLink['qrCode'] ?? null
+                ],
+                'Đã tạo liên kết thanh toán thành công'
+            );
+        } catch (\Exception $e) {
+            return $this->sendError('Không thể tạo liên kết thanh toán.', ['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Xác thực trạng thái thanh toán từ Payos
+     */
+    public function verifyPayosPayment(Request $request): JsonResponse
+    {
+        try {
+            // Lấy thông tin từ request
+            $orderCode = $request->input('orderCode');
+            $success = $request->input('success');
+            $success = ($success === 'true' || $success === true);
+            $cancel = $request->input('cancel') === 'true' || $request->input('cancel') === true;
+            
+            // Xử lý invoice_ids có thể là chuỗi hoặc đã là mảng
+            $invoiceIds = [];
+            if ($request->has('invoice_ids')) {
+                $rawInvoiceIds = $request->input('invoice_ids');
+                if (is_array($rawInvoiceIds)) {
+                    $invoiceIds = $rawInvoiceIds;
+                } else {
+                    $invoiceIds = explode(',', $rawInvoiceIds);
+                }
+                $invoiceIds = array_map('trim', $invoiceIds);
+                $invoiceIds = array_filter($invoiceIds);
+            }
+            
+            if (!$orderCode) {
+                return $this->sendResponse(
+                    [
+                        'status' => 'FAILED',
+                        'message' => 'Thiếu mã đơn hàng'
+                    ],
+                    'Không thể xác thực thanh toán'
+                );
+            }
+            
+            // Chuyển orderCode về dạng số nếu là chuỗi
+            if (!is_numeric($orderCode)) {
+                $orderCode = preg_replace('/[^0-9]/', '', $orderCode);
+            }
+            
+            // Tạo mã giao dịch hiển thị
+            $transactionCode = 'INV-' . $orderCode;
+            
+            // Xử lý khi người dùng hủy thanh toán
+            if ($cancel) {
+                return $this->sendResponse(
+                    [
+                        'status' => 'CANCELLED',
+                        'message' => 'Thanh toán đã bị hủy',
+                        'orderCode' => $orderCode
+                    ],
+                    'Thanh toán đã bị hủy'
+                );
+            }
+            
+            // Xử lý khi thanh toán thành công
+            if ($success) {
+                if (empty($invoiceIds)) {
+                    return $this->sendResponse(
+                        [
+                            'status' => 'FAILED',
+                            'message' => 'Thiếu thông tin hóa đơn'
+                        ],
+                        'Không thể xác thực thanh toán'
+                    );
+                }
+                
+                // Cập nhật trạng thái các hóa đơn
+                foreach ($invoiceIds as $invoiceId) {
+                    $invoice = Invoice::find($invoiceId);
+                    if ($invoice) {
+                        $invoice->payment_status = 'completed';
+                        $invoice->payment_date = now();
+                        // Tạo transaction_code duy nhất cho từng hóa đơn
+                        $invoice->transaction_code = 'INV-' . $orderCode . '-' . $invoiceId;
+                        $invoice->save();
+                    }
+                }
+                
+                return $this->sendResponse(
+                    [
+                        'status' => 'SUCCESS',
+                        'message' => 'Thanh toán thành công',
+                        'invoices' => $invoiceIds,
+                        'orderCode' => $orderCode,
+                        'transactionCode' => $transactionCode
+                    ],
+                    'Thanh toán thành công'
+                );
+            }
+            
+            return $this->sendResponse(
+                [
+                    'status' => 'FAILED',
+                    'message' => 'Trạng thái thanh toán không hợp lệ'
+                ],
+                'Không thể xác thực thanh toán'
+            );
+            
+        } catch (\Exception $e) {
+            return $this->sendError('Lỗi khi xác thực thanh toán.', ['error' => $e->getMessage()], 500);
+        }
     }
 }
