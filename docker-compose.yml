@@ -26,7 +26,6 @@ services:
     container_name: webserver
     restart: unless-stopped
     tty: true
-    platform: linux/arm64/v8
     ports:
       - "8080:80"
       - "8443:443"
@@ -38,11 +37,10 @@ services:
 
   # MySQL Service
   db:
-    image: mariadb:latest
+    image: mysql:5.7.22
     container_name: db
     restart: unless-stopped
     tty: true
-    platform: linux/arm64/v8
     ports:
       - "3306:3306"
     environment:
@@ -55,16 +53,18 @@ services:
       - ./mysql/my.cnf:/etc/mysql/my.cnf
     networks:
       - app-network
-
-  # Adminer Service (thay thế cho PHPMyAdmin)
-  adminer:
-    image: adminer
-    container_name: adminer
+  # phpMyAdmin Service
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin
     restart: unless-stopped
+    tty: true
     ports:
-      - "8081:8080"
+      - "8081:80"
     environment:
-      ADMINER_DEFAULT_SERVER: db
+      PMA_HOST: db
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: root
     depends_on:
       - db
     networks:
