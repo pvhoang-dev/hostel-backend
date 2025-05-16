@@ -460,12 +460,9 @@ class UserController extends BaseController
             'notification_preferences',
         ]));
 
-        if ($input['password']) {
-            $user->password = Hash::make($input['password']);
-        }
         $user->save();
 
-        return $this->sendResponse(new UserResource($user), 'Cập nhật người dùng thành công.');
+        return $this->sendResponse(new UserResource($user), 'User updated successfully.');
     }
 
     /**
@@ -527,14 +524,14 @@ class UserController extends BaseController
         $user = User::find($id);
 
         if (!$user) {
-            return $this->sendError('User not found.', [], 404);
+            return $this->sendError('Không tìm thấy người dùng.', [], 404);
         }
 
         $currentUser = Auth::user();
         $isAdmin = $currentUser->role->code === 'admin';
 
         if ($currentUser->id !== $user->id && !$isAdmin) {
-            return $this->sendError('You are not allowed to change this password.', [], 403);
+            return $this->sendError('Bạn không có quyền thay đổi mật khẩu của người dùng này.', [], 403);
         }
 
         $rules = [
@@ -548,16 +545,16 @@ class UserController extends BaseController
         $validator = Validator::make($request->all(), $rules);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors(), 422);
+            return $this->sendError('Lỗi xác thực.', $validator->errors(), 422);
         }
 
         if (!$isAdmin && !Hash::check($request->current_password, $user->password)) {
-            return $this->sendError('Current password is incorrect.', [], 400);
+            return $this->sendError('Mật khẩu hiện tại không đúng.', [], 400);
         }
 
         $user->password = Hash::make($request->new_password);
         $user->save();
 
-        return $this->sendResponse([], 'Password updated successfully.');
+        return $this->sendResponse([], 'Mật khẩu đã được cập nhật thành công.');
     }
 }
