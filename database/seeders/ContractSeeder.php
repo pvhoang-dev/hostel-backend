@@ -74,6 +74,7 @@ class ContractSeeder extends Seeder
                 $contractTerms = [6, 12, 12, 12, 24]; // Trọng số cho 12 tháng cao hơn
                 $termMonths = $contractTerms[array_rand($contractTerms)];
                 $endDate = Carbon::parse($startDate)->addMonths($termMonths);
+                $randomRenew = rand(0, 1);
                 
                 // Giá phòng đã được giảm 3 số 0 trong RoomSeeder
                 $contract = Contract::create([
@@ -85,7 +86,8 @@ class ContractSeeder extends Seeder
                     'notice_period' => 30, // 30 ngày thông báo trước khi hết hạn
                     'deposit_status' => 'held',
                     'status' => 'active',
-                    'auto_renew' => (bool)rand(0, 1),
+                    'auto_renew' => (bool)$randomRenew,
+                    'time_renew' => $randomRenew ? 6 : null,
                     'created_by' => User::whereHas('role', function ($query) {
                         $query->where('code', 'manager');
                     })->inRandomOrder()->first()->id,

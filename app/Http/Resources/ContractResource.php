@@ -24,6 +24,7 @@ class ContractResource extends JsonResource
             'termination_reason' => $this->termination_reason,
             'status'           => $this->status,
             'auto_renew'       => $this->auto_renew,
+            'time_renew'       => $this->time_renew,
             'created_by'       => new UserResource($this->whenLoaded('creator')),
             'updated_by'       => new UserResource($this->whenLoaded('updater')),
             'created_at'       => $this->created_at->format('h:m:s d/m/Y'),

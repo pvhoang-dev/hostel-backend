@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Models\Contract;
+use App\Observers\ContractObserver;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -19,6 +21,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        Contract::observe(ContractObserver::class);
     }
 }

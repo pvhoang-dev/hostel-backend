@@ -297,6 +297,33 @@ class RoomController extends BaseController
         $input = $request->all();
         $input['updated_by'] = $currentUser->id;
 
+        // Xử lý đồng bộ trạng thái phòng và hợp đồng
+        if (isset($input['status']) && $input['status'] !== $room->status) {
+            // Nếu phòng đang "used" và chuyển sang trạng thái khác
+            if ($room->status === 'used' && $input['status'] !== 'used') {
+                // Tìm hợp đồng active của phòng
+                $activeContract = $room->currentContract;
+                
+                if ($activeContract) {
+                    // Cập nhật hợp đồng sang trạng thái "terminated"
+                    $activeContract->update([
+                        'status' => 'terminated',
+                        'termination_reason' => 'Phòng chuyển trạng thái từ "used" sang ' . $input['status'],
+                        'updated_by' => $currentUser->id
+                    ]);
+                }
+            }
+            // Nếu phòng đang ở trạng thái khác và chuyển sang "used"
+            elseif ($room->status !== 'used' && $input['status'] === 'used') {
+                // Kiểm tra xem đã có hợp đồng active chưa
+                $hasActiveContract = $room->currentContract;
+                
+                if (!$hasActiveContract) {
+                    return $this->sendError('Lỗi dữ liệu.', ['status' => 'Không thể chuyển trạng thái phòng sang "used" khi chưa có hợp đồng active.'], 422);
+                }
+            }
+        }
+
         $room->update($input);
         $room->load('house');
 

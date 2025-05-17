@@ -25,11 +25,6 @@ class Room extends Model
         return $this->belongsTo(House::class);
     }
 
-    public function priceHistories()
-    {
-        return $this->hasMany(RoomPriceHistory::class);
-    }
-
     public function equipments()
     {
         return $this->hasMany(RoomEquipment::class);

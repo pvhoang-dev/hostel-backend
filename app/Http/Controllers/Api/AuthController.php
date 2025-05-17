@@ -23,7 +23,7 @@ class AuthController extends BaseController
     {
         if (Auth::attempt(['username' => $request->username, 'password' => $request->password])) {
             $user = Auth::user();
-            $token = $user->createToken('MyApp', ['*'], now()->addHours(1));
+            $token = $user->createToken('MyApp', ['*'], now()->addHours(24));
             $success['token'] = $token->plainTextToken;
             $success['name']  = $user->name;
             $success['user']  = [

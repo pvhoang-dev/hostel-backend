@@ -160,6 +160,7 @@ class ContractController extends BaseController
             'deposit_status' => 'sometimes|in:held,refunded,partial',
             'status' => 'sometimes|in:draft,active,terminated,expired',
             'auto_renew' => 'sometimes|boolean',
+            'time_renew' => 'sometimes|nullable|integer|min:1',
         ], [
             'room_id.required' => 'Phòng là bắt buộc',
             'room_id.exists' => 'Phòng không tồn tại',
@@ -182,6 +183,8 @@ class ContractController extends BaseController
             'deposit_status.in' => 'Trạng thái cọc không hợp lệ',
             'status.in' => 'Trạng thái hợp đồng không hợp lệ',
             'auto_renew.boolean' => 'Tự động gia hạn phải là boolean',
+            'time_renew.integer' => 'Thời gian gia hạn phải là số nguyên',
+            'time_renew.min' => 'Thời gian gia hạn phải lớn hơn 0',
         ]);
 
         if ($validator->fails()) {
@@ -193,6 +196,17 @@ class ContractController extends BaseController
 
             $input = $request->except('user_ids');
             $input['created_by'] = $currentUser->id;
+
+            // Nếu auto_renew là true mà không cung cấp time_renew
+            if (isset($input['auto_renew']) && $input['auto_renew'] && (!isset($input['time_renew']) || $input['time_renew'] <= 0)) {
+                // Tính time_renew từ khoảng cách giữa start_date và end_date
+                $startDate = \Carbon\Carbon::parse($input['start_date']);
+                $endDate = \Carbon\Carbon::parse($input['end_date']);
+                $monthsDiff = $endDate->diffInMonths($startDate);
+                
+                // Nếu khoảng cách > 0 thì sử dụng, nếu không thì mặc định là 6 tháng
+                $input['time_renew'] = $monthsDiff > 0 ? $monthsDiff : 6;
+            }
 
             $contract = Contract::create($input);
 
@@ -290,6 +304,7 @@ class ContractController extends BaseController
             'termination_reason' => 'sometimes|string|nullable',
             'status' => 'sometimes|in:draft,active,terminated,expired',
             'auto_renew' => 'sometimes|boolean',
+            'time_renew' => 'sometimes|nullable|integer|min:1',
         ], [
             'room_id.exists' => 'Phòng không tồn tại',
             'user_ids.*.exists' => 'Một hoặc nhiều người thuê không tồn tại',
@@ -305,6 +320,8 @@ class ContractController extends BaseController
             'termination_reason.string' => 'Lý do huỷ bỏ phải là chuỗi',
             'status.in' => 'Trạng thái hợp đồng không hợp lệ',
             'auto_renew.boolean' => 'Tự động gia hạn phải là boolean',
+            'time_renew.integer' => 'Thời gian gia hạn phải là số nguyên',
+            'time_renew.min' => 'Thời gian gia hạn phải lớn hơn 0',
         ]);
 
         if ($validator->fails()) {
