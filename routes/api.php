@@ -43,6 +43,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::resource('users', UserController::class);
     Route::post('/users/change-password/{id}', [UserController::class, 'changePassword']);
     Route::get('tenant/{tenantId}/managers', [UserController::class, 'getManagersForTenant']);
+    Route::get('manager/{managerId}/tenants', [UserController::class, 'getTenantsForManager']);
 
     Route::resource('notifications', NotificationController::class);
     Route::post('notifications/mark-all-as-read', [NotificationController::class, 'markAllAsRead']);
