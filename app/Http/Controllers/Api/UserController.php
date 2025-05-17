@@ -575,4 +575,73 @@ class UserController extends BaseController
 
         return $this->sendResponse([], 'Mật khẩu đã được cập nhật thành công.');
     }
+
+    /**
+     * Get managers for tenant by active contracts
+     *
+     * @param Request $request
+     * @param int $tenantId
+     * @return JsonResponse
+     */
+    public function getManagersForTenant(Request $request, $tenantId): JsonResponse
+    {
+        $currentUser = Auth::user();
+        
+        // Chỉ admin mới có quyền gọi API này
+        if (!$currentUser || $currentUser->role?->code !== 'admin') {
+            return $this->sendError('Không có quyền truy cập', [], 403);
+        }
+        
+        try {
+            // Tìm tenant
+            $tenant = User::with(['role', 'contracts' => function($query) {
+                $query->where('status', 'active')->with('room.house.manager');
+            }])->find($tenantId);
+            
+            if (!$tenant) {
+                return $this->sendError('Không tìm thấy khách trọ', [], 404);
+            }
+            
+            if ($tenant->role?->code !== 'tenant') {
+                return $this->sendError('Người dùng được chỉ định không phải là khách trọ', [], 400);
+            }
+            
+            $managers = [];
+            $managersIds = [];
+            
+            // Lấy manager từ các hợp đồng active
+            if ($tenant->contracts && count($tenant->contracts) > 0) {
+                foreach ($tenant->contracts as $contract) {
+                    if ($contract->room && $contract->room->house && $contract->room->house->manager) {
+                        $manager = $contract->room->house->manager;
+                        
+                        // Tránh trùng lặp
+                        if (!in_array($manager->id, $managersIds)) {
+                            $managersIds[] = $manager->id;
+                            $managers[] = [
+                                'id' => $manager->id,
+                                'name' => $manager->name,
+                                'role' => $manager->role,
+                                'house' => [
+                                    'id' => $contract->room->house->id,
+                                    'name' => $contract->room->house->name
+                                ]
+                            ];
+                        }
+                    }
+                }
+            }
+            
+            return $this->sendResponse([
+                'tenant' => [
+                    'id' => $tenant->id,
+                    'name' => $tenant->name
+                ],
+                'managers' => $managers
+            ], 'Lấy danh sách quản lý thành công');
+            
+        } catch (\Exception $e) {
+            return $this->sendError('Lỗi khi lấy danh sách quản lý: ' . $e->getMessage(), [], 500);
+        }
+    }
 }
