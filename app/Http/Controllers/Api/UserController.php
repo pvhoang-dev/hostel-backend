@@ -349,9 +349,27 @@ class UserController extends BaseController
                 return $this->sendError('Bạn không có quyền xem thông tin người dùng này.', []);
             }
         } else {
-            // Tenants can only see their own profile
-            if ($currentUser->id != $user->id) {
-                return $this->sendError('Bạn chỉ có thể xem thông tin tài khoản của mình.', []);
+            // Tenants can see their own profile
+            if ($currentUser->id == $user->id) {
+                // Allow access to own profile
+            }
+            // Tenants can see manager's profile if they manage house where tenant lives (via active contract)
+            elseif ($user->role?->code === 'manager') {
+                $activeContracts = $currentUser->contracts()->where('status', 'active')->with('room.house')->get();
+                
+                // Kiểm tra nếu manager này quản lý nhà nào mà tenant đang thuê
+                foreach ($activeContracts as $contract) {
+                    if ($contract->room && $contract->room->house) {
+                        if ($contract->room->house->manager_id == $user->id) {
+                            // Manager này quản lý nhà của tenant
+                            return $this->sendResponse(new UserResource($user), 'User retrieved successfully.');
+                        }
+                    }
+                }
+                
+                return $this->sendError('Bạn không có quyền xem thông tin người dùng này.', []);
+            } else {
+                return $this->sendError('Bạn chỉ có thể xem thông tin tài khoản của mình hoặc quản lý nhà của bạn.', []);
             }
         }
 
