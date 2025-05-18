@@ -76,7 +76,9 @@ class UpdateExpiredContracts extends Command
                         'updated_by' => 1 // Hệ thống tự động cập nhật, có thể thay bằng ID của admin
                     ]);
                     
-                    $this->info("Gia hạn hợp đồng #{$contract->id} thêm {$renewMonths} tháng, ngày hết hạn mới: {$newEndDate->toDateString()}");
+                    $message = "Gia hạn hợp đồng #{$contract->id} thêm {$renewMonths} tháng, ngày hết hạn mới: {$newEndDate->toDateString()}";
+                    $this->info($message);
+                    Log::info($message);
                     $renewedCount++;
                 } 
                 // Nếu không có auto_renew thì cập nhật trạng thái thành expired
@@ -101,14 +103,18 @@ class UpdateExpiredContracts extends Command
                         }
                     }
                     
-                    $this->info("Hợp đồng #{$contract->id} đã hết hạn và đã được cập nhật trạng thái thành expired");
+                    $message = "Hợp đồng #{$contract->id} đã hết hạn và đã được cập nhật trạng thái thành expired";
+                    $this->info($message);
+                    Log::info($message);
                     $count++;
                 }
             }
             
             DB::commit();
             
-            $this->info("Đã cập nhật {$count} hợp đồng hết hạn và {$renewedCount} hợp đồng được gia hạn tự động.");
+            $message = "Đã cập nhật {$count} hợp đồng hết hạn và {$renewedCount} hợp đồng được gia hạn tự động.";
+            $this->info($message);
+            Log::info($message);
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Lỗi khi cập nhật hợp đồng hết hạn: ' . $e->getMessage());
