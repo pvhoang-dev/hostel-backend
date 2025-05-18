@@ -217,11 +217,6 @@ class ContractController extends BaseController
                 ]);
             }
 
-            // Nếu hợp đồng có trạng thái active, cập nhật phòng thành used
-            if ($contract->status === 'active') {
-                Room::where('id', $contract->room_id)->update(['status' => 'used']);
-            }
-
             DB::commit();
 
             $contract->load(['room', 'users', 'creator']);
@@ -334,6 +329,22 @@ class ContractController extends BaseController
             $input = $request->except(['user_ids', 'created_by']);
             $input['updated_by'] = $currentUser->id;
 
+            // Nếu auto_renew là true mà không cung cấp time_renew
+            if (isset($input['auto_renew']) && $input['auto_renew'] && (!isset($input['time_renew']) || $input['time_renew'] <= 0)) {
+                // Sử dụng time_renew hiện tại nếu có
+                if ($contract->time_renew > 0) {
+                    $input['time_renew'] = $contract->time_renew;
+                } else {
+                    // Tính time_renew từ khoảng cách giữa start_date và end_date
+                    $startDate = \Carbon\Carbon::parse($request->input('start_date', $contract->start_date));
+                    $endDate = \Carbon\Carbon::parse($request->input('end_date', $contract->end_date));
+                    $monthsDiff = $endDate->diffInMonths($startDate);
+                    
+                    // Nếu khoảng cách > 0 thì sử dụng, nếu không thì mặc định là 6 tháng
+                    $input['time_renew'] = $monthsDiff > 0 ? $monthsDiff : 6;
+                }
+            }
+
             $oldStatus = $contract->status;
             $contract->update($input);
 
@@ -345,23 +356,6 @@ class ContractController extends BaseController
                         'contract_id' => $contract->id,
                         'user_id' => $userId
                     ]);
-                }
-            }
-
-            // Nếu trạng thái hợp đồng thay đổi thành active, cập nhật phòng thành used
-            if ($contract->status === 'active' && $oldStatus !== 'active') {
-                Room::where('id', $contract->room_id)->update(['status' => 'used']);
-            }
-            // Nếu trạng thái hợp đồng thay đổi từ active sang trạng thái khác, cập nhật phòng thành available
-            elseif ($oldStatus === 'active' && $contract->status !== 'active') {
-                // Kiểm tra nếu không còn hợp đồng active nào khác cho phòng này
-                $activeContractsCount = Contract::where('room_id', $contract->room_id)
-                    ->where('id', '!=', $contract->id)
-                    ->where('status', 'active')
-                    ->count();
-                
-                if ($activeContractsCount === 0) {
-                    Room::where('id', $contract->room_id)->update(['status' => 'available']);
                 }
             }
 
@@ -403,24 +397,8 @@ class ContractController extends BaseController
         try {
             DB::beginTransaction();
             
-            // Lưu trạng thái hợp đồng và room_id trước khi xóa
-            $wasActive = $contract->status === 'active';
-            $roomId = $contract->room_id;
-            
             // Xóa hợp đồng
             $contract->delete();
-            
-            // Nếu hợp đồng là active, kiểm tra xem còn hợp đồng active nào cho phòng này không
-            if ($wasActive) {
-                $activeContractsCount = Contract::where('room_id', $roomId)
-                    ->where('status', 'active')
-                    ->count();
-                
-                // Nếu không còn hợp đồng active nào, cập nhật phòng thành available
-                if ($activeContractsCount === 0) {
-                    Room::where('id', $roomId)->update(['status' => 'available']);
-                }
-            }
             
             DB::commit();
             

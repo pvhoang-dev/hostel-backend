@@ -3,7 +3,11 @@
 namespace App\Observers;
 
 use App\Models\Contract;
+use App\Models\Invoice;
+use App\Models\InvoiceItem;
 use App\Models\Room;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class ContractObserver
 {
@@ -12,9 +16,12 @@ class ContractObserver
      */
     public function created(Contract $contract): void
     {
-        // Khi tạo hợp đồng mới với trạng thái active, cập nhật phòng thành used
+        // Nếu hợp đồng có trạng thái active, cập nhật trạng thái phòng thành used
         if ($contract->status === 'active') {
-            $this->updateRoomStatus($contract->room_id, 'used');
+            Room::where('id', $contract->room_id)->update(['status' => 'used']);
+            
+            // Tạo hóa đơn mới cho hợp đồng
+            $this->createInitialInvoice($contract);
         }
     }
 
@@ -23,34 +30,20 @@ class ContractObserver
      */
     public function updated(Contract $contract): void
     {
-        // Nếu trạng thái hợp đồng thay đổi
-        if ($contract->isDirty('status')) {
-            $oldStatus = $contract->getOriginal('status');
-            $newStatus = $contract->status;
-
-            // Nếu từ active sang trạng thái khác
-            if ($oldStatus === 'active' && $newStatus !== 'active') {
-                // Kiểm tra xem phòng này còn hợp đồng active nào khác không
-                $hasActiveContract = Contract::where('room_id', $contract->room_id)
-                    ->where('id', '!=', $contract->id)
-                    ->where('status', 'active')
-                    ->exists();
-
-                // Nếu không còn hợp đồng active nào khác, cập nhật phòng thành available
-                if (!$hasActiveContract) {
-                    $this->updateRoomStatus($contract->room_id, 'available');
-                }
-            }
-            // Nếu từ trạng thái khác sang active
-            elseif ($oldStatus !== 'active' && $newStatus === 'active') {
-                // Cập nhật phòng sang used
-                $this->updateRoomStatus($contract->room_id, 'used');
-                
-                // Đảm bảo chỉ có một hợp đồng active duy nhất cho phòng này
-                Contract::where('room_id', $contract->room_id)
-                    ->where('id', '!=', $contract->id)
-                    ->where('status', 'active')
-                    ->update(['status' => 'expired']);
+        // Nếu trạng thái hợp đồng thay đổi thành active
+        if ($contract->status === 'active' && $contract->getOriginal('status') !== 'active') {
+            Room::where('id', $contract->room_id)->update(['status' => 'used']);
+        }
+        // Nếu trạng thái hợp đồng đổi từ active sang trạng thái khác
+        else if ($contract->getOriginal('status') === 'active' && $contract->status !== 'active') {
+            // Kiểm tra nếu không còn hợp đồng active nào cho phòng này
+            $activeContractsCount = Contract::where('room_id', $contract->room_id)
+                ->where('id', '!=', $contract->id)
+                ->where('status', 'active')
+                ->count();
+            
+            if ($activeContractsCount === 0) {
+                Room::where('id', $contract->room_id)->update(['status' => 'available']);
             }
         }
     }
@@ -60,29 +53,58 @@ class ContractObserver
      */
     public function deleted(Contract $contract): void
     {
-        // Nếu xóa hợp đồng đang active, cập nhật trạng thái phòng
+        // Nếu hợp đồng là active
         if ($contract->status === 'active') {
-            // Kiểm tra xem phòng này còn hợp đồng active nào khác không
-            $hasActiveContract = Contract::where('room_id', $contract->room_id)
+            // Kiểm tra xem còn hợp đồng active nào cho phòng này không
+            $activeContractsCount = Contract::where('room_id', $contract->room_id)
                 ->where('id', '!=', $contract->id)
                 ->where('status', 'active')
-                ->exists();
-
-            // Nếu không còn hợp đồng active nào khác, cập nhật phòng thành available
-            if (!$hasActiveContract) {
-                $this->updateRoomStatus($contract->room_id, 'available');
+                ->count();
+            
+            // Nếu không còn hợp đồng active nào, cập nhật phòng thành available
+            if ($activeContractsCount === 0) {
+                Room::where('id', $contract->room_id)->update(['status' => 'available']);
             }
         }
     }
-
+    
     /**
-     * Cập nhật trạng thái phòng
+     * Tạo hóa đơn ban đầu cho hợp đồng mới
      */
-    private function updateRoomStatus($roomId, $status): void
+    private function createInitialInvoice(Contract $contract): void
     {
-        $room = Room::find($roomId);
-        if ($room) {
-            $room->update(['status' => $status]);
+        try {
+            $invoice = Invoice::create([
+                'room_id' => $contract->room_id,
+                'invoice_type' => 'custom',
+                'total_amount' => $contract->monthly_price + $contract->deposit_amount,
+                'month' => Carbon::now()->month,
+                'year' => Carbon::now()->year,
+                'description' => 'Hóa đơn ban đầu cho hợp đồng mới #' . $contract->id,
+                'created_by' => $contract->created_by,
+                'payment_status' => 'pending',
+                'payment_method_id' => 1,
+            ]);
+            
+            // Tạo item cho tiền cọc
+            InvoiceItem::create([
+                'invoice_id' => $invoice->id,
+                'amount' => $contract->deposit_amount,
+                'description' => 'Tiền đặt cọc cho hợp đồng #' . $contract->id,
+            ]);
+            
+            // Tạo item cho tiền thuê tháng đầu
+            InvoiceItem::create([
+                'invoice_id' => $invoice->id,
+                'amount' => $contract->monthly_price,
+                'description' => 'Tiền thuê tháng đầu tiên (' . 
+                    Carbon::parse($contract->start_date)->format('d/m/Y') . ' - ' . 
+                    Carbon::parse($contract->start_date)->addMonth()->subDay()->format('d/m/Y') . ')',
+            ]);
+            
+            Log::info('Đã tạo hóa đơn ban đầu ID#' . $invoice->id . ' cho hợp đồng ID#' . $contract->id);
+        } catch (\Exception $e) {
+            Log::error('Lỗi khi tạo hóa đơn ban đầu cho hợp đồng ID#' . $contract->id . ': ' . $e->getMessage());
         }
     }
-} 
+}
