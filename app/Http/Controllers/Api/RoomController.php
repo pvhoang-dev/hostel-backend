@@ -11,9 +11,16 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Auth;
-
+use App\Services\NotificationService;
 class RoomController extends BaseController
 {
+    protected $notificationService;
+
+    public function __construct(NotificationService $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
+
     /**
      * Display a listing of the rooms.
      *
@@ -355,6 +362,15 @@ class RoomController extends BaseController
 
         if (!$isAdmin && !$isManager) {
             return $this->sendError('Lỗi xác thực.', ['error' => 'Chỉ quản trị viên hoặc quản lý nhà mới có thể xóa phòng.'], 403);
+        }
+
+        if ($room->house->manager_id && $room->house->manager_id !== $currentUser->id) {
+            $this->notificationService->create(
+                $room->house->manager_id,
+                'room_deleted',
+                "Phòng #{$room->id} đã được xóa",
+                "/rooms/{$room->id}"
+            );
         }
 
         $room->delete();

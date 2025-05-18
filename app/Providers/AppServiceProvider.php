@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Models\Contract;
 use App\Observers\ContractObserver;
+use App\Services\NotificationService;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -13,7 +14,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Đăng ký NotificationService
+        $this->app->singleton(NotificationService::class, function ($app) {
+            return new NotificationService();
+        });
     }
 
     /**

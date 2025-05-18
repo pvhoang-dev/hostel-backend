@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\BaseController as BaseController;
 use App\Http\Resources\RequestCommentResource;
 use App\Models\Request;
 use App\Models\RequestComment;
+use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request as HttpRequest;
 use Illuminate\Support\Facades\Auth;
@@ -13,6 +14,13 @@ use Illuminate\Support\Facades\Validator;
 
 class RequestCommentController extends BaseController
 {
+    protected $notificationService;
+    
+    public function __construct(NotificationService $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
+
     /**
      * Display a listing of the resource.
      */
@@ -131,6 +139,34 @@ class RequestCommentController extends BaseController
         $input['user_id'] = $user->id;
 
         $comment = RequestComment::create($input);
+        
+        // Gửi thông báo cho những người liên quan khi có bình luận mới
+        try {
+            // Xác định người cần được thông báo (những người liên quan đến yêu cầu ngoại trừ người comment)
+            $notificationRecipients = [];
+            
+            // Thêm người gửi yêu cầu (nếu không phải người comment)
+            if ($request->sender_id && $request->sender_id !== $user->id) {
+                $notificationRecipients[] = $request->sender_id;
+            }
+            
+            // Thêm người nhận yêu cầu (nếu không phải người comment)
+            if ($request->recipient_id && $request->recipient_id !== $user->id) {
+                $notificationRecipients[] = $request->recipient_id;
+            }
+            
+            // Gửi thông báo cho tất cả người liên quan
+            foreach ($notificationRecipients as $recipientId) {
+                $this->notificationService->create(
+                    $recipientId,
+                    'new_comment',
+                    "{$user->name} đã thêm một bình luận vào yêu cầu #{$request->id}",
+                    "/requests/{$request->id}"
+                );
+            }
+        } catch (\Exception $e) {
+            // Ghi log lỗi nhưng không dừng xử lý
+        }
 
         return $this->sendResponse(
             new RequestCommentResource($comment->load('user')),

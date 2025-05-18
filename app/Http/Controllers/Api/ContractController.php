@@ -11,9 +11,17 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use App\Services\NotificationService;
 
 class ContractController extends BaseController
 {
+    protected $notificationService;
+
+    public function __construct(NotificationService $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
+
     /**
      * Check if user is authorized to manage contracts for a room
      */
@@ -399,6 +407,14 @@ class ContractController extends BaseController
             
             // Xóa hợp đồng
             $contract->delete();
+
+            $this->notificationService->notifyRoomTenants(
+                $contract->room_id,
+                'contract',
+                "Hợp đồng thuê phòng {$contract->room->room_number} tại {$contract->room->house->name} đã được xóa.",
+                "/contracts/{$contract->id}",
+                false
+            );
             
             DB::commit();
             

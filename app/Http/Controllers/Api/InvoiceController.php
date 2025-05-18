@@ -15,9 +15,17 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use PayOS\PayOS;
+use App\Services\NotificationService;
 
 class InvoiceController extends BaseController
 {
+    protected $notificationService;
+
+    public function __construct(NotificationService $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
+
     /**
      * Display a listing of the resource.
      */
@@ -279,6 +287,16 @@ class InvoiceController extends BaseController
                     'description' => $itemData['description'] ?? null,
                 ]);
             }
+
+            $this->notificationService->notifyRoomTenants(
+                $room->id,
+                'invoice',
+                $input['invoice_type'] === 'service_usage' 
+                ? "Hóa đơn dịch vụ cho phòng {$room->room_number} {$invoice->month}/{$invoice->year} đã được tạo." 
+                : "Có một hoá đơn mới được tạo cho phòng {$room->room_number}.",
+                "/invoices/{$invoice->id}",
+                false
+            );
 
             DB::commit();
 
@@ -611,7 +629,16 @@ class InvoiceController extends BaseController
         } elseif ($request->has('transaction_code')) {
             $invoice->transaction_code = $request->transaction_code;
         }
-        
+
+        if ($invoice->payment_status === 'completed') {
+            $this->notificationService->notifyRoomTenants(
+                $invoice->room_id,
+                'invoice',
+                "Hóa đơn cho phòng {$invoice->room->room_number} {$invoice->month}/{$invoice->year} đã được thanh toán.",
+                "/invoices/{$invoice->id}",
+            );
+        }
+
         $invoice->updated_by = $user->id;
         $invoice->save();
         
@@ -798,17 +825,54 @@ class InvoiceController extends BaseController
                 }
                 
                 // Cập nhật trạng thái các hóa đơn
+                $alreadyCompletedInvoices = []; // Lưu trữ những hóa đơn đã hoàn thành trước đó
+                $newlyCompletedInvoices = []; // Lưu trữ những hóa đơn mới hoàn thành
+
                 foreach ($invoiceIds as $invoiceId) {
                     $invoice = Invoice::find($invoiceId);
                     if ($invoice) {
+                        // Kiểm tra nếu hóa đơn đã được thanh toán trước đó
+                        if ($invoice->payment_status === 'completed') {
+                            $alreadyCompletedInvoices[] = $invoiceId;
+                            continue;
+                        }
+
+                        // Lưu trạng thái trước đó
+                        $oldStatus = $invoice->payment_status;
+                        
+                        // Cập nhật thông tin
                         $invoice->payment_status = 'completed';
                         $invoice->payment_date = now();
                         // Tạo transaction_code duy nhất cho từng hóa đơn
                         $invoice->transaction_code = 'INV-' . $orderCode . '-' . $invoiceId;
                         $invoice->save();
+                        
+                        // Chỉ thêm vào danh sách hóa đơn mới hoàn thành nếu trạng thái thay đổi
+                        if ($oldStatus !== 'completed') {
+                            $newlyCompletedInvoices[] = $invoiceId;
+                        }
                     }
                 }
-                
+
+                // Chỉ gửi thông báo nếu có hóa đơn mới được hoàn thành
+                if (!empty($newlyCompletedInvoices) && isset($invoice) && $invoice->room_id) {
+                    if (count($newlyCompletedInvoices) > 1) {
+                        $this->notificationService->notifyRoomTenants(
+                            $invoice->room_id,
+                            'invoice',
+                            "Các hóa đơn #" . implode(', ', $newlyCompletedInvoices) . " đã được thanh toán.",
+                            "/invoices/{$invoice->id}",
+                        );
+                    } else {
+                        $this->notificationService->notifyRoomTenants(
+                            $invoice->room_id,
+                            'invoice',
+                            "Hóa đơn #{$newlyCompletedInvoices[0]} đã được thanh toán.",
+                            "/invoices/{$invoice->id}",
+                        );
+                    }
+                }
+
                 return $this->sendResponse(
                     [
                         'status' => 'SUCCESS',

@@ -53,9 +53,6 @@ class Room extends Model
 
         static::deleting(function ($room) {
             if (!$room->isForceDeleting()) {
-                foreach ($room->priceHistories as $history) {
-                    $history->delete();
-                }
                 foreach ($room->equipments as $equipment) {
                     $equipment->delete();
                 }

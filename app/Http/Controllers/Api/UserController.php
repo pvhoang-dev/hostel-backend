@@ -11,9 +11,18 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use App\Services\NotificationService;
+use Illuminate\Support\Facades\DB;
 
 class UserController extends BaseController
 {
+    protected $notificationService;
+
+    public function __construct(NotificationService $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
+    
     /**
      * Display a listing of the users.
      *
@@ -571,6 +580,16 @@ class UserController extends BaseController
         }
 
         $user->password = Hash::make($request->new_password);
+
+        $this->notificationService->create(
+            $user->id,
+            'password_changed',
+            $currentUser->id === $user->id 
+                ? "Mật khẩu của bạn đã được cập nhật thành công" 
+                : "Mật khẩu của bạn đã được cập nhật bởi " . $currentUser->name,
+            "/users/{$user->id}"
+        );
+
         $user->save();
 
         return $this->sendResponse([], 'Mật khẩu đã được cập nhật thành công.');

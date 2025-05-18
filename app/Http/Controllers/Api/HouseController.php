@@ -9,9 +9,16 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
-
+use App\Services\NotificationService;
 class HouseController extends BaseController
 {
+    protected $notificationService;
+
+    public function __construct(NotificationService $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
+
     /**
      * Display a listing of the houses.
      *
@@ -180,7 +187,16 @@ class HouseController extends BaseController
         $input['updated_by'] = $currentUser->id;
 
         $house = House::create($input);
-        $house->load(['manager', 'updater']);
+        
+        if ($house->manager_id !== $currentUser->id) {
+            $this->notificationService->create(
+                $house->manager_id,
+                'house',
+                "Nhà trọ {$house->name} đã được tạo. Bạn là quản lý của nhà trọ này.",
+                "/houses/{$house->id}",
+                false
+            );
+        }
 
         return $this->sendResponse(new HouseResource($house), 'Nhà trọ được tạo thành công.');
     }
@@ -302,6 +318,16 @@ class HouseController extends BaseController
         $house->update($input);
         $house->load(['manager', 'updater']);
 
+        if ($house->manager_id !== $currentUser->id) {
+            $this->notificationService->create(
+                $house->manager_id,
+                'house',
+                "Nhà trọ {$house->name} đã được cập nhật. Bạn là quản lý của nhà trọ này.",
+                "/houses/{$house->id}",
+                false
+            );
+        }
+
         return $this->sendResponse(new HouseResource($house), 'Cập nhật nhà trọ thành công.');
     }
 
@@ -324,6 +350,16 @@ class HouseController extends BaseController
         }
 
         $house = House::find($id);
+
+        if ($house->manager_id !== $currentUser->id) {
+            $this->notificationService->create(
+                $house->manager_id,
+                'house',
+                "Nhà trọ {$house->name} đã bị xóa.",
+                "/houses/{$house->id}",
+                false
+            );
+        }
 
         if (is_null($house)) {
             return $this->sendError('Không tìm thấy nhà trọ.');

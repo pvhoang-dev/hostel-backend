@@ -8,6 +8,7 @@ use App\Models\House;
 use App\Models\Request;
 use App\Models\User;
 use App\Models\Notification;
+use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request as HttpRequest;
 use Illuminate\Support\Facades\Auth;
@@ -15,6 +16,13 @@ use Illuminate\Support\Facades\Validator;
 
 class RequestController extends BaseController
 {
+    protected $notificationService;
+    
+    public function __construct(NotificationService $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
+
     /**
      * Display a listing of the resource.
      */
@@ -193,13 +201,12 @@ class RequestController extends BaseController
         
         // Tự động tạo thông báo cho người nhận khi yêu cầu được tạo
         try {
-            Notification::create([
-                'user_id' => $recipient->id,
-                'type' => 'new_request',
-                'content' => $user->name . ' đã tạo một yêu cầu mới cho bạn',
-                'url' => '/requests/' . $request->id,
-                'status' => 'unread'
-            ]);
+            $this->notificationService->create(
+                $recipient->id,
+                'new_request',
+                $user->name . ' đã tạo một yêu cầu mới cho bạn',
+                '/requests/' . $request->id
+            );
         } catch (\Exception $e) {
             // Ghi log lỗi nhưng không dừng xử lý
         }
@@ -251,6 +258,11 @@ class RequestController extends BaseController
             return $this->sendError('Bạn không có quyền cập nhật yêu cầu này', ['error' => 'Bạn không có quyền cập nhật yêu cầu này'], 403);
         }
 
+        // Lưu trữ thông tin cũ để so sánh sau khi cập nhật
+        $oldStatus = $request->status;
+        $oldRecipientId = $request->recipient_id;
+        $oldSenderId = $request->sender_id;
+
         // Apply role-specific restrictions
         if ($user->role->code === 'tenant') {
             // Tenants can't change sender_id or recipient_id
@@ -301,6 +313,85 @@ class RequestController extends BaseController
         $input['updated_by'] = $user->id;
 
         $request->update($input);
+        
+        // Gửi thông báo khi có thay đổi trạng thái
+        if (isset($input['status']) && $input['status'] !== $oldStatus) {
+            // Xác định các đối tượng cần thông báo
+            $notificationRecipients = [];
+            
+            // Tạo nội dung thông báo
+            $statusText = match($input['status']) {
+                'pending' => 'đang chờ',
+                'in_progress' => 'đang xử lý',
+                'completed' => 'đã hoàn thành',
+                'rejected' => 'đã bị từ chối',
+                default => $input['status']
+            };
+            
+            $notificationContent = "Yêu cầu #{$request->id} đã được cập nhật trạng thái thành {$statusText} bởi {$user->name}";
+            
+            // Thông báo cho người gửi (nếu không phải người cập nhật)
+            if ($request->sender_id && $request->sender_id !== $user->id) {
+                $notificationRecipients[] = $request->sender_id;
+            }
+            
+            // Thông báo cho người nhận (nếu không phải người cập nhật)
+            if ($request->recipient_id && $request->recipient_id !== $user->id) {
+                $notificationRecipients[] = $request->recipient_id;
+            }
+            
+            // Gửi thông báo
+            foreach ($notificationRecipients as $recipientId) {
+                $this->notificationService->create(
+                    $recipientId,
+                    'request_updated',
+                    $notificationContent,
+                    "/requests/{$request->id}"
+                );
+            }
+        }
+        
+        // Gửi thông báo khi có thay đổi người nhận
+        if (isset($input['recipient_id']) && $input['recipient_id'] != $oldRecipientId) {
+            // Thông báo cho người nhận mới
+            $this->notificationService->create(
+                $input['recipient_id'],
+                'request_transferred',
+                "{$user->name} đã chuyển yêu cầu #{$request->id} cho bạn",
+                "/requests/{$request->id}"
+            );
+            
+            // Thông báo cho người gửi (nếu không phải người cập nhật)
+            if ($request->sender_id && $request->sender_id !== $user->id) {
+                $this->notificationService->create(
+                    $request->sender_id,
+                    'request_transferred',
+                    "{$user->name} đã chuyển yêu cầu #{$request->id} cho người khác",
+                    "/requests/{$request->id}"
+                );
+            }
+        }
+        
+        // Gửi thông báo khi có thay đổi người gửi
+        if (isset($input['sender_id']) && $input['sender_id'] != $oldSenderId) {
+            // Thông báo cho người gửi mới
+            $this->notificationService->create(
+                $input['sender_id'],
+                'request_sender_changed',
+                "{$user->name} đã thay đổi người gửi của yêu cầu #{$request->id} thành bạn",
+                "/requests/{$request->id}"
+            );
+            
+            // Thông báo cho người nhận (nếu không phải người cập nhật)
+            if ($request->recipient_id && $request->recipient_id !== $user->id) {
+                $this->notificationService->create(
+                    $request->recipient_id,
+                    'request_sender_changed',
+                    "{$user->name} đã thay đổi người gửi của yêu cầu #{$request->id}",
+                    "/requests/{$request->id}"
+                );
+            }
+        }
 
         return $this->sendResponse(
             new RequestResource($request->load(['sender', 'recipient', 'updater'])),
@@ -325,13 +416,20 @@ class RequestController extends BaseController
             return $this->sendError('Lỗi xác thực.', ['error' => 'Tenants cannot delete requests'], 403);
         }
 
-        // Manager có thể xóa request họ gửi hoặc nhận
+        // Manager có thể xóa request họ gửi hoặc nhận, nhưng không được xóa nếu người gửi là admin
         if ($user->role->code === 'manager') {
+            // Kiểm tra nếu không phải là người gửi hoặc người nhận
             if ($request->sender_id !== $user->id && $request->recipient_id !== $user->id) {
-                return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể xóa yêu cầu mà bạn gửi hoặc nhận'], 403);
+                return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể xóa yêu cầu mà bạn gửi hoặc nhận lại từ khách trọ'], 403);
+            }
+            
+            // Kiểm tra nếu người gửi là admin
+            $sender = User::find($request->sender_id);
+            if ($sender && $sender->role->code === 'admin') {
+                return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không thể xóa yêu cầu được gửi từ quản trị viên'], 403);
             }
         }
-
+        
         $request->delete();
 
         return $this->sendResponse([], 'Yêu cầu đã được xóa thành công.');

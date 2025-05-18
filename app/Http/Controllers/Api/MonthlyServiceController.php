@@ -15,9 +15,17 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use App\Services\NotificationService;
 
 class MonthlyServiceController extends BaseController
 {
+    protected $notificationService;
+
+    public function __construct(NotificationService $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
+
     /**
      * Get rooms that need service usage updates for a specific month/year
      */
@@ -415,6 +423,13 @@ class MonthlyServiceController extends BaseController
                         'payment_status' => 'pending',
                         'transaction_code' => 'INV-' . Str::random(8) . '-' . time(),
                     ]);
+
+                    $this->notificationService->notifyRoomTenants(
+                        $roomId,
+                        'invoice',
+                        "Hóa đơn dịch vụ tháng $month/$year đã được tạo.",
+                        "/invoices/{$invoice->id}",
+                    );
                 }
 
                 // Tạo các invoice_item tương ứng với các dịch vụ
