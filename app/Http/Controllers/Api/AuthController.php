@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Services\AuthService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Auth;
 
 /**
  * Class AuthController
@@ -13,6 +13,18 @@ use Illuminate\Support\Facades\Auth;
  */
 class AuthController extends BaseController
 {
+    protected $authService;
+    
+    /**
+     * Constructor
+     * 
+     * @param AuthService $authService
+     */
+    public function __construct(AuthService $authService)
+    {
+        $this->authService = $authService;
+    }
+    
     /**
      * Login API
      *
@@ -21,20 +33,10 @@ class AuthController extends BaseController
      */
     public function login(Request $request): JsonResponse
     {
-        if (Auth::attempt(['username' => $request->username, 'password' => $request->password])) {
-            $user = Auth::user();
-            $token = $user->createToken('MyApp', ['*'], now()->addHours(24));
-            $success['token'] = $token->plainTextToken;
-            $success['name']  = $user->name;
-            $success['user']  = [
-                'id'        => $user->id,
-                'username'  => $user->username,
-                'email'     => $user->email,
-                'role'      => $user->role->code,
-                'name'      => $user->name,
-            ];
-
-            return $this->sendResponse($success, 'Đăng nhập thành công.');
+        $result = $this->authService->login($request);
+        
+        if ($result) {
+            return $this->sendResponse($result, 'Đăng nhập thành công.');
         } else {
             return $this->sendError('Không có quyền truy cập.', ['error' => 'Tên đăng nhập hoặc mật khẩu không chính xác']);
         }
@@ -48,8 +50,7 @@ class AuthController extends BaseController
      */
     public function logout(Request $request): JsonResponse
     {
-        $request->user()->currentAccessToken()->delete();
-
+        $this->authService->logout($request);
         return $this->sendResponse([], 'Đăng xuất thành công.');
     }
 }
