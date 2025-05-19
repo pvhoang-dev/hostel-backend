@@ -154,7 +154,37 @@ class RoomEquipmentController extends BaseController
             return $this->sendError('Lỗi xác thực.', ['error' => 'Chỉ quản trị viên hoặc quản lý nhà mới có thể quản lý thiết bị phòng.'], 403);
         }
 
-        // Create room equipment
+        // Kiểm tra xem thiết bị đã tồn tại trong phòng chưa
+        $existingEquipment = RoomEquipment::where('room_id', $input['room_id'])
+            ->where('equipment_id', $input['equipment_id'])
+            ->first();
+
+        if ($existingEquipment) {
+            // Nếu thiết bị đã tồn tại, cập nhật số lượng thay vì tạo mới
+            $newQuantity = $existingEquipment->quantity + $input['quantity'];
+            
+            // Cập nhật thông tin thiết bị
+            $existingEquipment->quantity = $newQuantity;
+            
+            // Cập nhật giá và mô tả nếu được cung cấp
+            if (isset($input['price'])) {
+                $existingEquipment->price = $input['price'];
+            }
+            
+            if (isset($input['description'])) {
+                $existingEquipment->description = $input['description'];
+            }
+            
+            $existingEquipment->save();
+            $existingEquipment->load(['room', 'equipment']);
+            
+            return $this->sendResponse(
+                new RoomEquipmentResource($existingEquipment), 
+                'Đã cập nhật số lượng thiết bị trong phòng.'
+            );
+        }
+
+        // Nếu thiết bị chưa tồn tại, tạo mới
         $roomEquipment = RoomEquipment::create($input);
         $roomEquipment->load(['room', 'equipment']);
 
