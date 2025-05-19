@@ -70,6 +70,20 @@ services:
     networks:
       - app-network
 
+  # Laravel Scheduler Service
+  scheduler:
+    image: php:8.3-fpm
+    container_name: scheduler
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - ./:/var/www
+    command: bash -c "while true; do php /var/www/artisan schedule:run; sleep 60; done"
+    networks:
+      - app-network
+    depends_on:
+      - app
+
 # Docker Networks
 networks:
   app-network:
