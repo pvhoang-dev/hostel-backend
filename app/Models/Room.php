@@ -59,6 +59,9 @@ class Room extends Model
                 foreach ($room->services as $service) {
                     $service->delete();
                 }
+                foreach ($room->contracts as $contract) {
+                    $contract->delete();
+                }
             }
         });
     }

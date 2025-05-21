@@ -4,22 +4,18 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Resources\ContractResource;
 use App\Http\Resources\UserResource;
-use App\Models\Contract;
-use App\Models\ContractUser;
-use App\Models\Room;
+use App\Services\ContractService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Validator;
-use App\Services\NotificationService;
+use Illuminate\Validation\ValidationException;
 
 class ContractController extends BaseController
 {
-    protected $notificationService;
+    protected $contractService;
 
-    public function __construct(NotificationService $notificationService)
+    public function __construct(ContractService $contractService)
     {
-        $this->notificationService = $notificationService;
+        $this->contractService = $contractService;
     }
 
     /**
@@ -45,383 +41,72 @@ class ContractController extends BaseController
 
     public function index(Request $request): JsonResponse
     {
-        $currentUser = auth()->user();
-        if (!$currentUser) {
-            return $this->sendError('Lỗi xác thực.', [], 401);
+        try {
+            $contracts = $this->contractService->getAllContracts($request);
+            return $this->sendResponse(
+                ContractResource::collection($contracts)->response()->getData(true),
+                'Danh sách hợp đồng đã được lấy thành công.'
+            );
+        } catch (\Exception $e) {
+            $code = method_exists($e, 'getCode') && $e->getCode() ? $e->getCode() : 500;
+            return $this->sendError($e->getMessage(), [], $code);
         }
-
-        $query = Contract::query();
-
-        if ($request->has('status')) {
-            $query->where('status', $request->status);
-        }
-
-        if ($request->has('house_id')) {
-            $query->whereHas('room', function ($q) use ($request) {
-                $q->where('house_id', $request->house_id);
-            });
-        }
-
-        if ($request->has('room_id')) {
-            $query->where('room_id', $request->room_id);
-        }
-
-        if ($request->has('start_date_from')) {
-            $query->where('start_date', '>=', $request->start_date_from);
-        }
-
-        if ($request->has('start_date_to')) {
-            $query->where('start_date', '<=', $request->start_date_to);
-        }
-
-        if ($request->has('end_date_from')) {
-            $query->where('end_date', '>=', $request->end_date_from);
-        }
-
-        if ($request->has('end_date_to')) {
-            $query->where('end_date', '<=', $request->end_date_to);
-        }
-
-        if ($request->has('deposit_status')) {
-            $query->where('deposit_status', $request->deposit_status);
-        }
-
-        if ($request->has('auto_renew')) {
-            $query->where('auto_renew', $request->auto_renew === 'true');
-        }
-
-        if ($currentUser->role->code === 'tenant') {
-            $query->whereHas('users', function ($q) use ($currentUser) {
-                $q->where('users.id', $currentUser->id);
-            });
-        } elseif ($currentUser->role->code === 'manager') {
-            $query->whereHas('room.house', function ($q) use ($currentUser) {
-                $q->where('houses.manager_id', $currentUser->id);
-            });
-        }
-
-        if ($request->has('user_id')) {
-            $query->whereHas('users', function ($q) use ($request) {
-                $q->where('users.id', $request->user_id);
-            });
-        }
-
-        $with = ['room', 'creator', 'updater'];
-
-        if ($request->has('include')) {
-            $includes = explode(',', $request->include);
-            if (in_array('users', $includes)) {
-                $with[] = 'users';
-            }
-            if (in_array('room.house', $includes)) {
-                $with[] = 'room.house';
-            }
-        } else {
-            $with[] = 'users';
-        }
-
-        $query->with($with);
-
-        $sortField = $request->get('sort_by', 'created_at');
-        $sortDirection = $request->get('sort_dir', 'desc');
-        $allowedSortFields = ['created_at', 'start_date', 'end_date', 'monthly_price'];
-
-        if (in_array($sortField, $allowedSortFields)) {
-            $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
-        } else {
-            $query->latest();
-        }
-
-        $perPage = $request->get('per_page', 10);
-        $contracts = $query->paginate($perPage);
-
-        return $this->sendResponse(
-            ContractResource::collection($contracts)->response()->getData(true),
-            'Danh sách hợp đồng đã được lấy thành công.'
-        );
     }
 
     public function store(Request $request): JsonResponse
     {
-        $currentUser = auth()->user();
-        if (!$currentUser) {
-            return $this->sendError('Lỗi xác thực.', [], 403);
-        }
-
-        if ($currentUser->role->code === 'tenant') {
-            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền tạo hợp đồng'], 403);
-        }
-
-        if (!$this->isAuthorizedForRoom($request->room_id)) {
-            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể quản lý hợp đồng cho tài sản mà bạn quản lý'], 403);
-        }
-
-        $validator = Validator::make($request->all(), [
-            'room_id' => 'required|exists:rooms,id',
-            'user_ids' => 'required|array',
-            'user_ids.*' => 'exists:users,id',
-            'start_date' => 'required|date',
-            'end_date' => 'required|date|after:start_date',
-            'monthly_price' => 'required|integer|min:0',
-            'deposit_amount' => 'required|integer|min:0',
-            'notice_period' => 'sometimes|integer|min:0',
-            'deposit_status' => 'sometimes|in:held,refunded,partial',
-            'status' => 'sometimes|in:draft,active,terminated,expired',
-            'auto_renew' => 'sometimes|boolean',
-            'time_renew' => 'sometimes|nullable|integer|min:1',
-        ], [
-            'room_id.required' => 'Phòng là bắt buộc',
-            'room_id.exists' => 'Phòng không tồn tại',
-            'user_ids.required' => 'Người thuê là bắt buộc',
-            'user_ids.array' => 'Người thuê phải là mảng',
-            'user_ids.*.exists' => 'Một hoặc nhiều người thuê không tồn tại',
-            'start_date.required' => 'Ngày bắt đầu là bắt buộc',
-            'start_date.date' => 'Ngày bắt đầu không hợp lệ',
-            'end_date.required' => 'Ngày kết thúc là bắt buộc',
-            'end_date.date' => 'Ngày kết thúc không hợp lệ',
-            'end_date.after' => 'Ngày kết thúc phải sau ngày bắt đầu',
-            'monthly_price.required' => 'Giá thuê tháng là bắt buộc',
-            'monthly_price.integer' => 'Giá thuê tháng phải là số',
-            'monthly_price.min' => 'Giá thuê tháng phải lớn hơn 0', 
-            'deposit_amount.required' => 'Tiền cọc là bắt buộc',
-            'deposit_amount.integer' => 'Tiền cọc phải là số',
-            'deposit_amount.min' => 'Tiền cọc phải lớn hơn 0',
-            'notice_period.integer' => 'Thời gian thông báo phải là số',
-            'notice_period.min' => 'Thời gian thông báo phải lớn hơn 0',
-            'deposit_status.in' => 'Trạng thái cọc không hợp lệ',
-            'status.in' => 'Trạng thái hợp đồng không hợp lệ',
-            'auto_renew.boolean' => 'Tự động gia hạn phải là boolean',
-            'time_renew.integer' => 'Thời gian gia hạn phải là số nguyên',
-            'time_renew.min' => 'Thời gian gia hạn phải lớn hơn 0',
-        ]);
-
-        if ($validator->fails()) {
-            return $this->sendError('Lỗi dữ liệu.', $validator->errors(), 422);
-        }
-
         try {
-            DB::beginTransaction();
-
-            $input = $request->except('user_ids');
-            $input['created_by'] = $currentUser->id;
-
-            // Nếu auto_renew là true mà không cung cấp time_renew
-            if (isset($input['auto_renew']) && $input['auto_renew'] && (!isset($input['time_renew']) || $input['time_renew'] <= 0)) {
-                // Tính time_renew từ khoảng cách giữa start_date và end_date
-                $startDate = \Carbon\Carbon::parse($input['start_date']);
-                $endDate = \Carbon\Carbon::parse($input['end_date']);
-                $monthsDiff = $endDate->diffInMonths($startDate);
-                
-                // Nếu khoảng cách > 0 thì sử dụng, nếu không thì mặc định là 6 tháng
-                $input['time_renew'] = $monthsDiff > 0 ? $monthsDiff : 6;
-            }
-
-            $contract = Contract::create($input);
-
-            foreach ($request->user_ids as $userId) {
-                ContractUser::create([
-                    'contract_id' => $contract->id,
-                    'user_id' => $userId
-                ]);
-            }
-
-            DB::commit();
-
-            $contract->load(['room', 'users', 'creator']);
-
+            $contract = $this->contractService->createContract($request);
             return $this->sendResponse(
                 new ContractResource($contract),
                 'Hợp đồng đã được tạo thành công.'
             );
-
+        } catch (ValidationException $e) {
+            return $this->sendError('Lỗi dữ liệu.', $e->errors(), 422);
         } catch (\Exception $e) {
-            DB::rollBack();
-            return $this->sendError('Lỗi khi tạo hợp đồng.', ['error' => $e->getMessage()], 500);
+            $code = method_exists($e, 'getCode') && $e->getCode() ? $e->getCode() : 500;
+            return $this->sendError('Lỗi khi tạo hợp đồng.', ['error' => $e->getMessage()], $code);
         }
     }
 
     public function show(string $id): JsonResponse
     {
-        $currentUser = auth()->user();
-        if (!$currentUser) {
-            return $this->sendError('Lỗi xác thực.', [], 401);
+        try {
+            $contract = $this->contractService->getContractById($id);
+            return $this->sendResponse(
+                new ContractResource($contract),
+                'Hợp đồng đã được lấy thành công.'
+            );
+        } catch (\Exception $e) {
+            $code = method_exists($e, 'getCode') && $e->getCode() ? $e->getCode() : 500;
+            return $this->sendError($e->getMessage(), [], $code);
         }
-
-        $contract = Contract::with(['room.house', 'creator', 'users', 'updater'])->find($id);
-
-        if (is_null($contract)) {
-            return $this->sendError('Hợp đồng không tồn tại.', [], 404);
-        }
-
-        if ($currentUser->role->code === 'tenant') {
-            $isUserContract = $contract->users->contains('id', $currentUser->id);
-            if (!$isUserContract) {
-                return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể xem hợp đồng của chính mình'], 403);
-            }
-        } elseif (!$this->isAuthorizedForRoom($contract->room_id)) {
-            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể xem hợp đồng cho phòng mà bạn quản lý'], 403);
-        }
-
-        return $this->sendResponse(
-            new ContractResource($contract),
-            'Hợp đồng đã được lấy thành công.'
-        );
     }
 
     public function update(Request $request, string $id): JsonResponse
     {
-        $currentUser = auth()->user();
-        if (!$currentUser) {
-            return $this->sendError('Lỗi xác thực.', [], 401);
-        }
-
-        if ($currentUser->role->code === 'tenant') {
-            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền cập nhật hợp đồng'], 403);
-        }
-
-        $contract = Contract::find($id);
-        if (is_null($contract)) {
-            return $this->sendError('Hợp đồng không tồn tại.', [], 404);
-        }
-
-        if (!$this->isAuthorizedForRoom($contract->room_id)) {
-            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể cập nhật hợp đồng cho phòng mà bạn quản lý'], 403);
-        }
-
-        if ($request->has('room_id') && $request->room_id != $contract->room_id) {
-            if (!$this->isAuthorizedForRoom($request->room_id)) {
-                return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể gán hợp đồng cho phòng trong tài sản mà bạn quản lý'], 403);
-            }
-        }
-
-        $validator = Validator::make($request->all(), [
-            'room_id' => 'sometimes|exists:rooms,id',
-            'user_ids' => 'sometimes|array',
-            'user_ids.*' => 'exists:users,id',
-            'start_date' => 'sometimes|date',
-            'end_date' => 'sometimes|date|after:start_date',
-            'monthly_price' => 'sometimes|integer|min:0',
-            'deposit_amount' => 'sometimes|integer|min:0',
-            'notice_period' => 'sometimes|integer|min:0',
-            'deposit_status' => 'sometimes|in:held,refunded,partial',
-            'termination_reason' => 'sometimes|string|nullable',
-            'status' => 'sometimes|in:draft,active,terminated,expired',
-            'auto_renew' => 'sometimes|boolean',
-            'time_renew' => 'sometimes|nullable|integer|min:1',
-        ], [
-            'room_id.exists' => 'Phòng không tồn tại',
-            'user_ids.*.exists' => 'Một hoặc nhiều người thuê không tồn tại',
-            'start_date.date' => 'Ngày bắt đầu không hợp lệ',
-            'end_date.date' => 'Ngày kết thúc không hợp lệ',
-            'end_date.after' => 'Ngày kết thúc phải sau ngày bắt đầu',
-            'monthly_price.integer' => 'Giá thuê tháng phải là số',
-            'monthly_price.min' => 'Giá thuê tháng phải lớn hơn 0',
-            'deposit_amount.integer' => 'Tiền cọc phải là số',
-            'deposit_amount.min' => 'Tiền cọc phải lớn hơn 0',
-            'notice_period.integer' => 'Thời gian thông báo phải là số',
-            'notice_period.min' => 'Thời gian thông báo phải lớn hơn 0',
-            'termination_reason.string' => 'Lý do huỷ bỏ phải là chuỗi',
-            'status.in' => 'Trạng thái hợp đồng không hợp lệ',
-            'auto_renew.boolean' => 'Tự động gia hạn phải là boolean',
-            'time_renew.integer' => 'Thời gian gia hạn phải là số nguyên',
-            'time_renew.min' => 'Thời gian gia hạn phải lớn hơn 0',
-        ]);
-
-        if ($validator->fails()) {
-            return $this->sendError('Lỗi dữ liệu.', $validator->errors(), 422);
-        }
-
         try {
-            DB::beginTransaction();
-
-            $input = $request->except(['user_ids', 'created_by']);
-            $input['updated_by'] = $currentUser->id;
-
-            // Nếu auto_renew là true mà không cung cấp time_renew
-            if (isset($input['auto_renew']) && $input['auto_renew'] && (!isset($input['time_renew']) || $input['time_renew'] <= 0)) {
-                // Sử dụng time_renew hiện tại nếu có
-                if ($contract->time_renew > 0) {
-                    $input['time_renew'] = $contract->time_renew;
-                } else {
-                    // Tính time_renew từ khoảng cách giữa start_date và end_date
-                    $startDate = \Carbon\Carbon::parse($request->input('start_date', $contract->start_date));
-                    $endDate = \Carbon\Carbon::parse($request->input('end_date', $contract->end_date));
-                    $monthsDiff = $endDate->diffInMonths($startDate);
-                    
-                    // Nếu khoảng cách > 0 thì sử dụng, nếu không thì mặc định là 6 tháng
-                    $input['time_renew'] = $monthsDiff > 0 ? $monthsDiff : 6;
-                }
-            }
-
-            $oldStatus = $contract->status;
-            $contract->update($input);
-
-            if ($request->has('user_ids')) {
-                ContractUser::where('contract_id', $contract->id)->forceDelete();
-
-                foreach ($request->user_ids as $userId) {
-                    ContractUser::create([
-                        'contract_id' => $contract->id,
-                        'user_id' => $userId
-                    ]);
-                }
-            }
-
-            DB::commit();
-
-            $contract->load(['room', 'creator', 'users', 'updater']);
-
+            $contract = $this->contractService->updateContract($request, $id);
             return $this->sendResponse(
                 new ContractResource($contract),
                 'Hợp đồng đã được cập nhật thành công.'
             );
-
+        } catch (ValidationException $e) {
+            return $this->sendError('Lỗi dữ liệu.', $e->errors(), 422);
         } catch (\Exception $e) {
-            DB::rollBack();
-            return $this->sendError('Lỗi khi cập nhật hợp đồng.', ['error' => $e->getMessage()], 500);
+            $code = method_exists($e, 'getCode') && $e->getCode() ? $e->getCode() : 500;
+            return $this->sendError('Lỗi khi cập nhật hợp đồng.', ['error' => $e->getMessage()], $code);
         }
     }
 
     public function destroy(string $id): JsonResponse
     {
-        $currentUser = auth()->user();
-        if (!$currentUser) {
-            return $this->sendError('Lỗi xác thực.', [], 401);
-        }
-
-        if ($currentUser->role->code === 'tenant') {
-            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền xóa hợp đồng'], 403);
-        }
-
-        $contract = Contract::find($id);
-        if (is_null($contract)) {
-            return $this->sendError('Hợp đồng không tồn tại.', [], 404);
-        }
-
-        if (!$this->isAuthorizedForRoom($contract->room_id)) {
-            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể xóa hợp đồng cho phòng mà bạn quản lý'], 403);
-        }
-
         try {
-            DB::beginTransaction();
-            
-            // Xóa hợp đồng
-            $contract->delete();
-
-            $this->notificationService->notifyRoomTenants(
-                $contract->room_id,
-                'contract',
-                "Hợp đồng thuê phòng {$contract->room->room_number} tại {$contract->room->house->name} đã được xóa.",
-                "/contracts/{$contract->id}",
-                false
-            );
-            
-            DB::commit();
-            
+            $this->contractService->deleteContract($id);
             return $this->sendResponse([], 'Hợp đồng đã được xóa thành công.');
         } catch (\Exception $e) {
-            DB::rollBack();
-            return $this->sendError('Lỗi khi xóa hợp đồng.', ['error' => $e->getMessage()], 500);
+            $code = method_exists($e, 'getCode') && $e->getCode() ? $e->getCode() : 500;
+            return $this->sendError($e->getMessage(), [], $code);
         }
     }
 
@@ -430,44 +115,17 @@ class ContractController extends BaseController
      */
     public function getAvailableTenants(Request $request): JsonResponse
     {
-        $currentUser = auth()->user();
-        if (!$currentUser) {
-            return $this->sendError('Lỗi xác thực.', [], 401);
+        try {
+            $tenants = $this->contractService->getAvailableTenants($request);
+            return $this->sendResponse(
+                UserResource::collection($tenants),
+                'Danh sách người thuê đã được lấy thành công.'
+            );
+        } catch (ValidationException $e) {
+            return $this->sendError('Lỗi dữ liệu.', $e->errors(), 422);
+        } catch (\Exception $e) {
+            $code = method_exists($e, 'getCode') && $e->getCode() ? $e->getCode() : 500;
+            return $this->sendError($e->getMessage(), [], $code);
         }
-        
-        if ($currentUser->role->code === 'tenant') {
-            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn không có quyền truy cập vào tài nguyên này'], 403);
-        }
-        
-        $validator = Validator::make($request->all(), [
-            'room_id' => 'required|exists:rooms,id',
-        ]);
-
-        if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors(), 422);
-        }
-        
-        // Kiểm tra quyền truy cập phòng
-        if (!$this->isAuthorizedForRoom($request->room_id)) {
-            return $this->sendError('Lỗi xác thực.', ['error' => 'Bạn chỉ có thể truy cập phòng mà bạn quản lý'], 403);
-        }
-        
-        // Tạo query cơ bản
-        $query = \App\Models\User::whereHas('role', function($query) {
-            $query->where('code', 'tenant');
-        });
-        
-        // Chỉ lấy người không có hợp đồng active
-        $query->whereDoesntHave('contracts', function($query) {
-            $query->where('status', 'active');
-        });
-        
-        // Lấy danh sách người thuê
-        $tenants = $query->with('role')->get();
-        
-        return $this->sendResponse(
-            UserResource::collection($tenants),
-            'Danh sách người thuê đã được lấy thành công.'
-        );
     }
 }
