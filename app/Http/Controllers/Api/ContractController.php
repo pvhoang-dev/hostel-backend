@@ -18,27 +18,6 @@ class ContractController extends BaseController
         $this->contractService = $contractService;
     }
 
-    /**
-     * Check if user is authorized to manage contracts for a room
-     */
-    private function isAuthorizedForRoom($roomId): bool
-    {
-        $user = auth()->user();
-
-        if ($user->role->code === 'admin') {
-            return true;
-        }
-
-        if ($user->role->code === 'manager') {
-            $room = Room::with('house')->find($roomId);
-            if (!$room || !$room->house) return false;
-
-            return $room->house->manager_id == $user->id;
-        }
-
-        return false;
-    }
-
     public function index(Request $request): JsonResponse
     {
         try {

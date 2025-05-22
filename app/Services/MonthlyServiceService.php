@@ -60,7 +60,7 @@ class MonthlyServiceService
         $rooms = $result['rooms'];
 
         return [
-            'success' => true, 
+            'success' => true,
             'data' => [
                 'rooms' => $rooms,
                 'count' => $rooms->count(),
@@ -174,9 +174,8 @@ class MonthlyServiceService
 
         try {
             $result = $this->monthlyServiceRepository->saveRoomServiceUsage($request);
-            
             // Send notification if invoice was created
-            if (isset($result['invoice']) && $result['invoice'] && !isset($result['updated_invoice'])) {
+            if (isset($result['invoice']) && $result['invoice'] && !$result['updated_invoice']) {
                 $invoice = $result['invoice'];
                 $this->notificationService->notifyRoomTenants(
                     $request->room_id,
@@ -185,7 +184,7 @@ class MonthlyServiceService
                     "/invoices/{$invoice->id}",
                 );
             }
-            
+
             return [
                 'success' => true,
                 'data' => $result,
@@ -216,4 +215,4 @@ class MonthlyServiceService
             ]
         ];
     }
-} 
+}

@@ -3,13 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\BaseController as BaseController;
-use App\Models\Contract;
-use App\Models\House;
-use App\Models\Room;
-use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use App\Services\DashboardService;
 
 class DashboardController extends BaseController

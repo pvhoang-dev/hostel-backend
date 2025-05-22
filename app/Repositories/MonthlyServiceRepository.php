@@ -55,7 +55,7 @@ class MonthlyServiceRepository implements MonthlyServiceRepositoryInterface
         // Add a flag indicating if the room needs updates 
         $roomsWithNeedUpdateFlag = $roomsWithServices->map(function ($room) use ($month, $year) {
             $needsUpdate = true;
-            
+
             // Room needs update if any of its services don't have usage records for this month/year
             foreach ($room->services as $roomService) {
                 if ($roomService->status === 'active') {
@@ -92,7 +92,7 @@ class MonthlyServiceRepository implements MonthlyServiceRepositoryInterface
     public function getRoomServices(string $roomId, int $month, int $year): array
     {
         $room = Room::with('house')->findOrFail($roomId);
-        
+
         // Kiểm tra xem đã có hóa đơn cho phòng này trong tháng/năm này hay chưa
         $existingInvoice = Invoice::where('room_id', $roomId)
             ->where('month', $month)
@@ -155,8 +155,8 @@ class MonthlyServiceRepository implements MonthlyServiceRepositoryInterface
             'services' => $result,
             'month' => $month,
             'year' => $year,
-            'has_invoice' => $existingInvoice !== null, 
-            'invoice_id' => $existingInvoice ? $existingInvoice->id : null 
+            'has_invoice' => $existingInvoice !== null,
+            'invoice_id' => $existingInvoice ? $existingInvoice->id : null
         ];
     }
 
@@ -176,6 +176,7 @@ class MonthlyServiceRepository implements MonthlyServiceRepositoryInterface
         $existingInvoice = Invoice::where('room_id', $roomId)
             ->where('month', $month)
             ->where('year', $year)
+            ->where('invoice_type', 'service_usage')
             ->first();
 
         // Begin transaction
@@ -191,14 +192,14 @@ class MonthlyServiceRepository implements MonthlyServiceRepositoryInterface
                     $roomService = RoomService::where('id', $roomServiceId)
                         ->where('room_id', $roomId)
                         ->first();
-                    
+
                     if ($roomService) {
                         // Xóa service usage cho dịch vụ bị bỏ chọn
                         $deletedServiceUsage = ServiceUsage::where('room_service_id', $roomServiceId)
                             ->where('month', $month)
                             ->where('year', $year)
                             ->first();
-                        
+
                         if ($deletedServiceUsage) {
                             // Tìm và xóa invoice_item liên quan nếu có invoice
                             if ($existingInvoice && $updateInvoice) {
@@ -207,7 +208,7 @@ class MonthlyServiceRepository implements MonthlyServiceRepositoryInterface
                                     ->where('service_usage_id', $deletedServiceUsage->id)
                                     ->delete();
                             }
-                            
+
                             // Xóa service_usage
                             $deletedServiceUsage->delete();
                         }
@@ -254,7 +255,7 @@ class MonthlyServiceRepository implements MonthlyServiceRepositoryInterface
 
                     // Tính tổng tiền cho hóa đơn
                     $totalAmount += $serviceData['price_used'];
-                    
+
                     $savedServices[] = $serviceUsage;
                 } else {
                     // Nếu usage_value = 0, xóa service usage nếu có
@@ -272,17 +273,17 @@ class MonthlyServiceRepository implements MonthlyServiceRepositoryInterface
                 if ($existingInvoice) {
                     // Cập nhật hóa đơn hiện có
                     $invoice = $existingInvoice;
-                    
+
                     // Xóa chỉ các invoice item liên quan đến service_usage
                     InvoiceItem::where('invoice_id', $invoice->id)
                         ->where('source_type', 'service_usage')
                         ->delete();
-                    
+
                     // Tính lại tổng tiền bao gồm các manual item hiện có
                     $manualItemsTotal = InvoiceItem::where('invoice_id', $invoice->id)
                         ->where('source_type', '!=', 'service_usage')
                         ->sum('amount');
-                    
+
                     $invoice->total_amount = $totalAmount + $manualItemsTotal;
                     $invoice->updated_by = $user->id;
                     $invoice->save();
@@ -306,7 +307,7 @@ class MonthlyServiceRepository implements MonthlyServiceRepositoryInterface
                 // Tạo các invoice_item tương ứng với các dịch vụ
                 foreach ($savedServices as $serviceUsage) {
                     $roomService = RoomService::with('service')->find($serviceUsage->room_service_id);
-                    
+
                     if ($serviceUsage->usage_value > 0) {
                         InvoiceItem::create([
                             'invoice_id' => $invoice->id,
@@ -317,12 +318,12 @@ class MonthlyServiceRepository implements MonthlyServiceRepositoryInterface
                         ]);
                     }
                 }
-                
+
                 // Cập nhật lại tổng tiền hóa đơn sau khi tất cả các dịch vụ đã được xử lý
                 if ($invoice) {
                     // Tính lại tổng tiền từ tất cả các invoice_item
                     $recalculatedTotal = InvoiceItem::where('invoice_id', $invoice->id)->sum('amount');
-                    
+
                     // Cập nhật tổng tiền
                     $invoice->total_amount = $recalculatedTotal;
                     $invoice->save();
@@ -356,4 +357,4 @@ class MonthlyServiceRepository implements MonthlyServiceRepositoryInterface
             return House::all();
         }
     }
-} 
+}

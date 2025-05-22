@@ -10,7 +10,6 @@ use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\MonthlyServiceController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PaymentMethodController;
-use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\RequestCommentController;
 use App\Http\Controllers\Api\RequestController;
 use App\Http\Controllers\Api\RoleController;
@@ -37,7 +36,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Roles and Permissions
     Route::resource('roles', RoleController::class);
-    Route::resource('permissions', PermissionController::class);
 
     // Users
     Route::resource('users', UserController::class);
