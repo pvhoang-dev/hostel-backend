@@ -50,4 +50,4 @@ class DashboardService
             'system_info' => $systemInfo,
         ];
     }
-} 
+}
