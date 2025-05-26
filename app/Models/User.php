@@ -31,8 +31,6 @@ class User extends Authenticatable
         'vehicle_plate',
         'status',
         'role_id',
-        'avatar_url',
-        'notification_preferences'
     ];
 
     /**

@@ -99,8 +99,6 @@ class UserService
             'vehicle_plate'            => 'nullable|string',
             'status'                   => 'sometimes|string',
             'role_id'                  => 'nullable|exists:roles,id',
-            'avatar_url'               => 'nullable|string',
-            'notification_preferences' => 'nullable',
         ], [
             'username.required' => 'Bắt buộc điền username.',
             'username.unique'   => 'Username đã tồn tại.',
@@ -205,8 +203,6 @@ class UserService
             'vehicle_plate'            => 'sometimes|nullable|string',
             'status'                   => 'sometimes|string',
             'role_id'                  => 'sometimes|nullable|exists:roles,id',
-            'avatar_url'               => 'sometimes|nullable|string',
-            'notification_preferences' => 'sometimes|nullable',
         ], [
             'username.required' => 'Bắt buộc điền username.',
             'username.unique'   => 'Username đã tồn tại.',
@@ -233,8 +229,6 @@ class UserService
             'vehicle_plate',
             'status',
             'role_id',
-            'avatar_url',
-            'notification_preferences',
         ]);
 
         $updatedUser = $this->userRepository->update($user->id, $updateData);

@@ -156,14 +156,11 @@ class RoomService
 
         // Gửi thông báo cho quản lý nhà
         if ($room && $house->manager_id && $currentUser->id !== $house->manager_id) {
-            $this->notificationService->sendNotification(
+            $this->notificationService->create(
                 $house->manager_id,
                 'Phòng mới đã được tạo',
                 'Phòng ' . $room->room_number . ' đã được tạo trong nhà ' . $house->name,
-                [
-                    'type' => 'room_created',
-                    'room_id' => $room->id
-                ]
+                "/rooms/{$room->id}",
             );
         }
 

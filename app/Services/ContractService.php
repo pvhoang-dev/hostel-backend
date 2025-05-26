@@ -183,7 +183,7 @@ class ContractService
             'deposit_amount' => 'required|integer|min:0',
             'notice_period' => 'sometimes|integer|min:0',
             'deposit_status' => 'sometimes|in:held,refunded,partial',
-            'status' => 'sometimes|in:draft,active,terminated,expired',
+            'status' => 'sometimes|in:pending,active,terminated,expired',
             'auto_renew' => 'sometimes|boolean',
         ], [
             'room_id.required' => 'Phòng là bắt buộc',
@@ -289,7 +289,7 @@ class ContractService
             'notice_period' => 'sometimes|integer|min:0',
             'deposit_status' => 'sometimes|in:held,refunded,partial',
             'termination_reason' => 'sometimes|string|nullable',
-            'status' => 'sometimes|in:draft,active,terminated,expired',
+            'status' => 'sometimes|in:pending,active,terminated,expired',
             'auto_renew' => 'sometimes|boolean',
         ], [
             'room_id.exists' => 'Phòng không tồn tại',
