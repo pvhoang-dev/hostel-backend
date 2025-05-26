@@ -22,7 +22,6 @@ use App\Http\Controllers\Api\StorageController;
 use App\Http\Controllers\Api\SystemSettingController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\ConfigController;
-use App\Http\Controllers\Api\StatisticsController;
 use Illuminate\Support\Facades\Route;
 
 Route::controller(AuthController::class)->group(function () {
@@ -34,16 +33,6 @@ Route::middleware('auth:sanctum')->group(function () {
     // Authentication
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/dashboard/stats', [DashboardController::class, 'stats']);
-    
-    // Statistics
-    Route::prefix('statistics')->group(function () {
-        Route::get('/overview', [StatisticsController::class, 'overview']);
-        Route::get('/contracts', [StatisticsController::class, 'contracts']);
-        Route::get('/revenue', [StatisticsController::class, 'revenue']);
-        Route::get('/services', [StatisticsController::class, 'services']);
-        Route::get('/equipment', [StatisticsController::class, 'equipment']);
-        Route::post('/export-report', [StatisticsController::class, 'exportReport']);
-    });
 
     // Roles and Permissions
     Route::resource('roles', RoleController::class);

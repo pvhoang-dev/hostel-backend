@@ -49,8 +49,6 @@ use App\Repositories\StorageRepository;
 use App\Repositories\SystemSettingRepository;
 use App\Repositories\UserRepository;
 use App\Services\NotificationService;
-use App\Repositories\Interfaces\StatisticsRepositoryInterface;
-use App\Repositories\StatisticsRepository;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -88,7 +86,6 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(RoomEquipmentRepositoryInterface::class, RoomEquipmentRepository::class);
         $this->app->bind(RoomServiceRepositoryInterface::class, RoomServiceRepository::class);
         $this->app->bind(ServiceUsageRepositoryInterface::class, ServiceUsageRepository::class);
-        $this->app->bind(StatisticsRepositoryInterface::class, StatisticsRepository::class);
     }
 
     /**
