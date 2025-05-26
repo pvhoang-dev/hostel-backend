@@ -28,6 +28,7 @@ use App\Repositories\Interfaces\RoomRepositoryInterface;
 use App\Repositories\Interfaces\RoomServiceRepositoryInterface;
 use App\Repositories\Interfaces\ServiceRepositoryInterface;
 use App\Repositories\Interfaces\ServiceUsageRepositoryInterface;
+use App\Repositories\Interfaces\StatisticsRepositoryInterface;
 use App\Repositories\Interfaces\StorageRepositoryInterface;
 use App\Repositories\Interfaces\SystemSettingRepositoryInterface;
 use App\Repositories\Interfaces\UserRepositoryInterface;
@@ -45,6 +46,7 @@ use App\Repositories\RoomRepository;
 use App\Repositories\RoomServiceRepository;
 use App\Repositories\ServiceRepository;
 use App\Repositories\ServiceUsageRepository;
+use App\Repositories\StatisticsRepository;
 use App\Repositories\StorageRepository;
 use App\Repositories\SystemSettingRepository;
 use App\Repositories\UserRepository;
@@ -86,6 +88,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(RoomEquipmentRepositoryInterface::class, RoomEquipmentRepository::class);
         $this->app->bind(RoomServiceRepositoryInterface::class, RoomServiceRepository::class);
         $this->app->bind(ServiceUsageRepositoryInterface::class, ServiceUsageRepository::class);
+        $this->app->bind(StatisticsRepositoryInterface::class, StatisticsRepository::class);
     }
 
     /**
