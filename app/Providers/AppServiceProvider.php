@@ -3,7 +3,9 @@
 namespace App\Providers;
 
 use App\Models\Contract;
+use App\Models\Room;
 use App\Observers\ContractObserver;
+use App\Observers\RoomObserver;
 use App\Repositories\AuthRepository;
 use App\Repositories\ConfigRepository;
 use App\Repositories\ContractRepository;
@@ -97,5 +99,6 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Contract::observe(ContractObserver::class);
+        Room::observe(RoomObserver::class);
     }
 }

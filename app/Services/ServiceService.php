@@ -63,7 +63,7 @@ class ServiceService
     {
         // Chỉ admin mới có thể tạo dịch vụ
         $user = Auth::user();
-        if (!$user || $user->role->code !== 'admin') {
+        if (!$user || $user->role->code !== 'admin' && $user->role->code !== 'manager') {
             throw new \Exception('Bạn không có quyền thực hiện thao tác này', 403);
         }
 

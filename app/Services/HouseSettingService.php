@@ -32,11 +32,6 @@ class HouseSettingService
             throw new \Exception('Không có quyền truy cập.');
         }
 
-        // Tenant không được xem nội quy nhà
-        if ($currentUser->role->code === 'tenant') {
-            throw new \Exception('Bạn không có quyền xem nội quy nhà.');
-        }
-
         $filters = [
             'current_user' => $currentUser,
             'house_id' => $request->house_id ?? null,

@@ -31,7 +31,7 @@ class SystemSettingService
         $user = Auth::user();
 
         // Chỉ cho phép admin truy cập
-        if (!$user || $user->role->code !== 'admin') {
+        if (!$user) {
             throw new \Exception('Bạn không có quyền thực hiện thao tác này', 403);
         }
 
@@ -109,7 +109,7 @@ class SystemSettingService
         $user = Auth::user();
 
         // Chỉ cho phép admin xem chi tiết cài đặt
-        if (!$user || $user->role->code !== 'admin') {
+        if (!$user) {
             throw new \Exception('Bạn không có quyền thực hiện thao tác này', 403);
         }
 
