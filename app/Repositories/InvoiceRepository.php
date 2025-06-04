@@ -504,7 +504,7 @@ class InvoiceRepository implements InvoiceRepositoryInterface
         $paymentLink = $payos->createPaymentLink($order);
         
         if (!$paymentLink) {
-            throw new \Exception('Không thể tạo liên kết thanh toán');
+            throw new \Exception('Không thể tạo liên kết thanh toán. Vui lòng nhấn lại');
         }
         
         return [
