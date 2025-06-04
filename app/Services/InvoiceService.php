@@ -313,15 +313,10 @@ class InvoiceService
         $validator = Validator::make($request->all(), [
             'invoice_ids' => 'required|array',
             'invoice_ids.*' => 'exists:invoices,id',
-            'amount' => 'required|numeric|min:1000',
-            'description' => 'nullable|string',
         ], [
             'invoice_ids.required' => 'Danh sách hóa đơn là bắt buộc',
             'invoice_ids.array' => 'Danh sách hóa đơn phải là mảng',
             'invoice_ids.*.exists' => 'Một hoặc nhiều hóa đơn không tồn tại',
-            'amount.required' => 'Số tiền thanh toán là bắt buộc',
-            'amount.numeric' => 'Số tiền thanh toán phải là số',
-            'amount.min' => 'Số tiền thanh toán phải lớn hơn 1000',
         ]);
 
         if ($validator->fails()) {
@@ -344,7 +339,30 @@ class InvoiceService
         }
 
         try {
-            return $this->invoiceRepository->createPayosPayment($request->all());
+            // Lấy thông tin chi tiết của tất cả hóa đơn để tính toán số tiền chính xác
+            $invoices = Invoice::whereIn('id', $invoiceIds)
+                ->where('payment_status', '!=', 'completed')
+                ->get();
+            
+            if ($invoices->isEmpty()) {
+                throw new \Exception('Không tìm thấy hóa đơn cần thanh toán hoặc hóa đơn đã được thanh toán.', 400);
+            }
+            
+            // Tính tổng tiền từ tất cả hóa đơn
+            $totalAmount = $invoices->sum('total_amount');
+            
+            if ($totalAmount <= 0) {
+                throw new \Exception('Tổng số tiền thanh toán phải lớn hơn 0.', 400);
+            }
+
+            $invoiceIds = $invoices->pluck('id')->toArray();
+            
+            // Gọi repository để tạo thanh toán
+            return $this->invoiceRepository->createPayosPayment([
+                'invoice_ids' => $invoiceIds,
+                'amount' => $totalAmount,
+                'description' => 'Thanh toán HD'
+            ]);
         } catch (\Exception $e) {
             throw $e;
         }
