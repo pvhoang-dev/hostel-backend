@@ -92,6 +92,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Payment Gateway
     Route::post('/payment/create-link-payment', [InvoiceController::class, 'createPayosPayment']);
     Route::post('/payment/receive-hook', [InvoiceController::class, 'verifyPayosPayment']);
+    Route::post('/payment/update-cash', [InvoiceController::class, 'updateCashPayment']);
 
     // Config Management
     Route::resource('configs', ConfigController::class);

@@ -249,4 +249,34 @@ class InvoiceController extends BaseController
             return $this->sendError('Lỗi khi xác thực thanh toán.', [$message], $code);
         }
     }
+
+    /**
+     * Xử lý thanh toán tiền mặt từ tenant
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function updateCashPayment(Request $request): JsonResponse
+    {
+        try {
+            $result = $this->invoiceService->updateCashPayment($request);
+            return $this->sendResponse(
+                $result,
+                'Yêu cầu thanh toán tiền mặt đã được ghi nhận và thông báo đã được gửi cho quản lý nhà'
+            );
+        } catch (ValidationException $e) {
+            return $this->sendError('Lỗi dữ liệu.', $e->errors(), 422);
+        } catch (\Exception $e) {
+            $code = 500;
+            $message = $e->getMessage();
+            
+            // Check if error message contains status code
+            if (preg_match('/:(\d+)$/', $message, $matches)) {
+                $code = intval($matches[1]);
+                $message = preg_replace('/:(\d+)$/', '', $message);
+            }
+            
+            return $this->sendError('Không thể xử lý thanh toán tiền mặt.', [$message], $code);
+        }
+    }
 }

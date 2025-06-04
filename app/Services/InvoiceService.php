@@ -381,4 +381,139 @@ class InvoiceService
             throw $e;
         }
     }
+
+    /**
+     * Xử lý thanh toán tiền mặt
+     * 
+     * @param Request $request
+     * @return array
+     * @throws \Exception
+     */
+    public function updateCashPayment($request)
+    {
+        $user = Auth::user();
+        if (!$user) {
+            throw new \Exception('Lỗi xác thực.', 401);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'invoice_ids' => 'required|array',
+            'invoice_ids.*' => 'exists:invoices,id',
+            'payment_method_id' => 'required|exists:payment_methods,id',
+            'description' => 'nullable|string',
+        ], [
+            'invoice_ids.required' => 'Danh sách hóa đơn là bắt buộc',
+            'invoice_ids.array' => 'Danh sách hóa đơn phải là mảng',
+            'invoice_ids.*.exists' => 'Một hoặc nhiều hóa đơn không tồn tại',
+            'payment_method_id.required' => 'Phương thức thanh toán là bắt buộc',
+            'payment_method_id.exists' => 'Phương thức thanh toán không tồn tại',
+        ]);
+
+        if ($validator->fails()) {
+            throw ValidationException::withMessages($validator->errors()->toArray());
+        }
+
+        $invoiceIds = $request->invoice_ids;
+        $paymentMethodId = $request->payment_method_id;
+        $description = $request->description ?? 'Thanh toán tiền mặt';
+
+        // Kiểm tra xem thanh toán có phải là tiền mặt không
+        if ($paymentMethodId != 2) { // Giả định ID 2 là tiền mặt
+            throw new \Exception('Phương thức thanh toán không hợp lệ, chỉ chấp nhận tiền mặt.', 400);
+        }
+
+        // Kiểm tra quyền truy cập
+        if ($user->role->code === 'tenant') {
+            // Tenant chỉ được thanh toán hóa đơn của chính họ
+            $tenantInvoiceIds = $this->invoiceRepository->getTenantInvoiceIds($user->id);
+
+            // Kiểm tra xem tất cả các invoice_ids có thuộc về tenant không
+            foreach ($invoiceIds as $invoiceId) {
+                if (!in_array($invoiceId, $tenantInvoiceIds)) {
+                    throw new \Exception('Bạn chỉ có thể thanh toán hóa đơn của chính mình.', 403);
+                }
+            }
+        } else {
+            throw new \Exception('Chỉ tenant mới có thể yêu cầu thanh toán tiền mặt.', 403);
+        }
+
+        try {
+            DB::beginTransaction();
+            
+            $updatedInvoices = [];
+            $roomId = null;
+            $houseId = null;
+            $managerId = null;
+            $totalAmount = 0;
+            
+            // Cập nhật từng hóa đơn
+            foreach ($invoiceIds as $invoiceId) {
+                $invoice = $this->invoiceRepository->getInvoiceById($invoiceId);
+                if (!$invoice) continue;
+                
+                // Lưu thông tin phòng và nhà để thông báo cho manager
+                if (!$roomId) $roomId = $invoice->room_id;
+                if (!$houseId && isset($invoice->room->house_id)) $houseId = $invoice->room->house_id;
+                if (!$managerId && isset($invoice->room->house->manager_id)) $managerId = $invoice->room->house->manager_id;
+                
+                // Cập nhật payment_method_id và trạng thái thành pending
+                $invoice->payment_method_id = $paymentMethodId;
+                $invoice->transaction_code = 'CASH-' . $invoiceId . '-' . time();
+                // Không cập nhật trạng thái thành completed, chỉ đảm bảo là pending
+                $invoice->payment_status = 'waiting';
+                
+                // Kiểm tra xem description có chứa dấu gạch ngang không
+                if (strpos($invoice->description, ' - ') !== false) {
+                    // Nếu có, lấy phần trước dấu gạch ngang đầu tiên
+                    $invoice->description = substr($invoice->description, 0, strpos($invoice->description, ' - '));
+                    $invoice->description .= ' - ' . $description;
+                } else {
+                    // Nếu không có dấu gạch ngang, thêm description mới vào cuối
+                    $invoice->description = $invoice->description . ' - ' . $description;
+                }
+                
+                $invoice->save();
+                
+                $updatedInvoices[] = $invoice;
+                $totalAmount += $invoice->total_amount;
+            }
+            
+            // Gửi thông báo cho manager nếu có
+            if ($managerId) {
+                $notificationMessage = "Tenant " . $user->name . " đã yêu cầu thanh toán tiền mặt cho " . 
+                                      count($updatedInvoices) . " hóa đơn, tổng số tiền " . 
+                                      number_format($totalAmount) . " VND. Vui lòng xác nhận khi nhận được tiền.";
+                
+                $this->notificationService->create(
+                    $managerId,
+                    'invoice_cash_payment',
+                    $notificationMessage,
+                    "/invoices?payment_status=pending&payment_method_id=" . $paymentMethodId,
+                    false
+                );
+            }
+            
+            // Thông báo cho tenant
+            $notificationMessage = "Yêu cầu thanh toán tiền mặt của bạn đã được gửi đến quản lý. Vui lòng chờ xác nhận.";
+            $this->notificationService->create(
+                $user->id,
+                'invoice_cash_payment',
+                $notificationMessage,
+                "/tenant-payments",
+                false
+            );
+            
+            DB::commit();
+            
+            return [
+                'success' => true,
+                'invoices' => $updatedInvoices,
+                'total_amount' => $totalAmount,
+                'notification_sent' => $managerId !== null
+            ];
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
+    }
 } 
