@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Http\Resources\InvoiceResource;
+use App\Models\Invoice;
 use App\Models\Room;
 use App\Models\ServiceUsage;
 use App\Repositories\Interfaces\InvoiceRepositoryInterface;
@@ -12,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
+use PayOS\PayOS;
 
 class InvoiceService
 {
@@ -376,6 +378,16 @@ class InvoiceService
                         "/invoices/{$result['new_completed_invoices'][0]}",
                     );
                 }
+
+                $room = Room::with('house')->find($result['room_id']);
+                if ($room && $room->house && $room->house->manager_id) {
+                    $this->notificationService->create(
+                        $room->house->manager_id,
+                        'invoice',
+                        "Khách trọ đã thanh toán thành công " . count($result['new_completed_invoices']) . " hóa đơn qua Payos.",
+                        "/invoices?room_id={$result['room_id']}&payment_status=completed",
+                    );
+                }
             }
             
             return $result;
@@ -420,7 +432,7 @@ class InvoiceService
         $description = $request->description ?? 'Thanh toán tiền mặt';
 
         // Kiểm tra xem thanh toán có phải là tiền mặt không
-        if ($paymentMethodId != 2) { // Giả định ID 2 là tiền mặt
+        if ($paymentMethodId != 2) { // ID 2 là tiền mặt
             throw new \Exception('Phương thức thanh toán không hợp lệ, chỉ chấp nhận tiền mặt.', 400);
         }
 
@@ -430,9 +442,20 @@ class InvoiceService
             $tenantInvoiceIds = $this->invoiceRepository->getTenantInvoiceIds($user->id);
 
             // Kiểm tra xem tất cả các invoice_ids có thuộc về tenant không
-            foreach ($invoiceIds as $invoiceId) {
-                if (!in_array($invoiceId, $tenantInvoiceIds)) {
-                    throw new \Exception('Bạn chỉ có thể thanh toán hóa đơn của chính mình.', 403);
+            $invalidInvoices = array_diff($invoiceIds, $tenantInvoiceIds);
+            if (!empty($invalidInvoices)) {
+                throw new \Exception('Bạn chỉ có thể thanh toán hóa đơn của chính mình.', 403);
+            }
+            
+            // Kiểm tra trạng thái của các hóa đơn
+            $invoices = Invoice::whereIn('id', $invoiceIds)->get();
+            foreach ($invoices as $invoice) {
+                if ($invoice->payment_status === 'completed') {
+                    throw new \Exception('Hóa đơn #' . $invoice->id . ' đã được thanh toán.', 400);
+                }
+                
+                if ($invoice->payment_status === 'waiting') {
+                    throw new \Exception('Hóa đơn #' . $invoice->id . ' đang chờ xác nhận thanh toán.', 400);
                 }
             }
         } else {
@@ -458,21 +481,13 @@ class InvoiceService
                 if (!$houseId && isset($invoice->room->house_id)) $houseId = $invoice->room->house_id;
                 if (!$managerId && isset($invoice->room->house->manager_id)) $managerId = $invoice->room->house->manager_id;
                 
-                // Cập nhật payment_method_id và trạng thái thành pending
+                // Cập nhật payment_method_id và trạng thái thành waiting
                 $invoice->payment_method_id = $paymentMethodId;
                 $invoice->transaction_code = 'CASH-' . $invoiceId . '-' . time();
-                // Không cập nhật trạng thái thành completed, chỉ đảm bảo là pending
                 $invoice->payment_status = 'waiting';
                 
-                // Kiểm tra xem description có chứa dấu gạch ngang không
-                if (strpos($invoice->description, ' - ') !== false) {
-                    // Nếu có, lấy phần trước dấu gạch ngang đầu tiên
-                    $invoice->description = substr($invoice->description, 0, strpos($invoice->description, ' - '));
-                    $invoice->description .= ' - ' . $description;
-                } else {
-                    // Nếu không có dấu gạch ngang, thêm description mới vào cuối
-                    $invoice->description = $invoice->description . ' - ' . $description;
-                }
+                // Thêm mô tả thanh toán
+                $invoice->description = $this->appendPaymentDescription($invoice->description, $description);
                 
                 $invoice->save();
                 
@@ -490,7 +505,7 @@ class InvoiceService
                     $managerId,
                     'invoice_cash_payment',
                     $notificationMessage,
-                    "/invoices?payment_status=pending&payment_method_id=" . $paymentMethodId,
+                    "/invoices?payment_status=waiting&payment_method_id=" . $paymentMethodId,
                     false
                 );
             }
@@ -518,6 +533,32 @@ class InvoiceService
             throw $e;
         }
     }
+    
+    /**
+     * Thêm mô tả thanh toán vào mô tả hóa đơn
+     * 
+     * @param string|null $currentDescription
+     * @param string $paymentDescription
+     * @return string
+     */
+    private function appendPaymentDescription($currentDescription, $paymentDescription)
+    {
+        $currentDescription = trim($currentDescription ?? '');
+        
+        // Kiểm tra xem description có chứa dấu gạch ngang không
+        if (strpos($currentDescription, ' - ') !== false) {
+            // Nếu có, lấy phần trước dấu gạch ngang đầu tiên
+            $currentDescription = substr($currentDescription, 0, strpos($currentDescription, ' - '));
+        }
+        
+        // Nếu description rỗng, trả về payment description luôn
+        if (empty($currentDescription)) {
+            return $paymentDescription;
+        }
+        
+        // Thêm description mới vào cuối
+        return $currentDescription . ' - ' . $paymentDescription;
+    }
 
     /**
      * Xử lý webhook từ Payos
@@ -531,88 +572,142 @@ class InvoiceService
         try {
             $webhookData = $request->all();
             
-            // Ghi log dữ liệu webhook
+            // Ghi log dữ liệu webhook để debug
             Log::info('Payos webhook received', ['data' => $webhookData]);
             
-            // Khởi tạo SDK PayOS với cấu hình
-            $payos = new \PayOS\PayOS(
+            // Khởi tạo SDK PayOS
+            $payos = new PayOS(
                 payos_config('client_id'),
                 payos_config('api_key'),
                 payos_config('checksum_key')
             );
             
-            // Xác thực dữ liệu webhook
+            // Kiểm tra xem webhook có đủ dữ liệu cần thiết không
+            if (!isset($webhookData['signature']) || !isset($webhookData['data'])) {
+                Log::error('Payos webhook missing required fields', ['data' => $webhookData]);
+                return ['success' => false, 'message' => 'Missing required webhook fields'];
+            }
+            
+            // Xác thực dữ liệu webhook và lấy dữ liệu đã xác thực
             try {
+                // Phương thức này xác thực chữ ký webhook bằng checksum_key
                 $verifiedData = $payos->verifyPaymentWebhookData($webhookData);
-                
+
                 // Kiểm tra trạng thái thanh toán
-                if (!isset($verifiedData['status']) || $verifiedData['status'] !== 'PAID') {
+                if (!isset($verifiedData['code']) || $verifiedData['code'] !== '00') {
                     return ['success' => false, 'message' => 'Payment not completed'];
                 }
                 
                 // Lấy orderCode để tìm hóa đơn liên quan
-                $orderCode = $verifiedData['orderCode'];
+                if (!isset($verifiedData['orderCode'])) {
+                    Log::error('Payos webhook missing orderCode', ['data' => $verifiedData]);
+                    return ['success' => false, 'message' => 'Missing orderCode'];
+                }
                 
-                // Tìm các hóa đơn có transaction_code chứa orderCode
-                $invoices = DB::table('invoices')
-                    ->where('transaction_code', 'like', "%{$orderCode}%")
-                    ->where('payment_status', '!=', 'completed')
-                    ->get();
+                $orderCode = $verifiedData['orderCode'];
+                $transactionCode = 'INV-' . $orderCode;
+                
+                // Tìm tất cả invoices liên quan dựa trên transaction_code
+                $invoices = Invoice::where('transaction_code', $transactionCode)
+                                  ->where('payment_status', '!=', 'completed')
+                                  ->get();
                 
                 if ($invoices->isEmpty()) {
-                    return ['success' => true, 'message' => 'No invoices found to update'];
+                    Log::info('No invoices found');
+                    return ['success' => true, 'message' => 'Không tìm thấy hóa đơn cần cập nhật'];
                 }
                 
-                // Cập nhật trạng thái hóa đơn
+                // Cập nhật trạng thái các hóa đơn
                 $updatedInvoiceIds = [];
                 $roomId = null;
+                $userId = null;
+                
+                DB::beginTransaction();
                 
                 foreach ($invoices as $invoice) {
-                    DB::table('invoices')
-                        ->where('id', $invoice->id)
-                        ->update([
-                            'payment_status' => 'completed',
-                            'payment_date' => now(),
-                            'updated_at' => now()
-                        ]);
+                    // Lưu lại room_id để thông báo
+                    $roomId = $invoice->room_id;
+                    
+                    // Lưu userId của tenant (giả định từ contract)
+                    if (!$userId && $invoice->room && $invoice->room->contracts) {
+                        $tenant = $invoice->room->contracts()
+                            ->where('status', 'active')
+                            ->first()
+                            ->users()
+                            ->where('role_id', function ($query) {
+                                $query->select('id')->from('roles')->where('code', 'tenant');
+                            })
+                            ->first();
+                            
+                        if ($tenant) {
+                            $userId = $tenant->id;
+                        }
+                    }
+                    
+                    // Cập nhật thông tin
+                    $invoice->payment_status = 'completed';
+                    $invoice->payment_date = now();
+                    $invoice->save();
                     
                     $updatedInvoiceIds[] = $invoice->id;
-                    if (!$roomId && isset($invoice->room_id)) {
-                        $roomId = $invoice->room_id;
-                    }
                 }
                 
-                // Gửi thông báo nếu có hóa đơn được cập nhật
-                if (!empty($updatedInvoiceIds) && $roomId) {
+                // Gửi thông báo cho khách trọ nếu có userId
+                if ($roomId) {
                     if (count($updatedInvoiceIds) > 1) {
                         $this->notificationService->notifyRoomTenants(
                             $roomId,
                             'invoice',
-                            "Các hóa đơn #" . implode(', ', $updatedInvoiceIds) . " đã được thanh toán.",
+                            "Các hóa đơn #" . implode(', ', $updatedInvoiceIds) . " đã được thanh toán thành công qua Payos.",
                             "/invoices/{$updatedInvoiceIds[0]}",
+                            false
                         );
                     } else {
                         $this->notificationService->notifyRoomTenants(
                             $roomId,
                             'invoice',
-                            "Hóa đơn #{$updatedInvoiceIds[0]} đã được thanh toán.",
+                            "Hóa đơn #{$updatedInvoiceIds[0]} đã được thanh toán thành công qua Payos.",
                             "/invoices/{$updatedInvoiceIds[0]}",
+                            false
                         );
                     }
                 }
                 
+                // Thông báo cho manager của house
+                if ($roomId) {
+                    $room = Room::with('house')->find($roomId);
+                    if ($room && $room->house && $room->house->manager_id) {
+                        $this->notificationService->create(
+                            $room->house->manager_id,
+                            'invoice',
+                            "Khách trọ đã thanh toán thành công " . count($updatedInvoiceIds) . " hóa đơn qua Payos.",
+                            "/invoices?room_id={$roomId}&payment_status=completed",
+                            false
+                        );
+                    }
+                }
+                
+                DB::commit();
+                
                 return [
                     'success' => true,
                     'message' => 'Payment verified and invoices updated',
-                    'invoices_updated' => $updatedInvoiceIds
+                    'invoices_updated' => $updatedInvoiceIds,
+                    'room_id' => $roomId
                 ];
                 
             } catch (\Exception $e) {
-                Log::error('Payos webhook verification failed: ' . $e->getMessage());
+                Log::error('Payos webhook verification failed: ' . $e->getMessage(), [
+                    'trace' => $e->getTraceAsString(),
+                    'data' => $webhookData
+                ]);
+                DB::rollBack();
                 return ['success' => false, 'message' => 'Invalid webhook data: ' . $e->getMessage()];
             }
         } catch (\Exception $e) {
-            Log::error('Payos webhook processing error: ' . $e->getMessage());
+            Log::error('Payos webhook processing error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
             throw $e;
         }
     }

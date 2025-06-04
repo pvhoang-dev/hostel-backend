@@ -5,13 +5,13 @@ namespace App\Repositories;
 use App\Models\House;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
-use App\Models\Room;
 use App\Models\ServiceUsage;
 use App\Repositories\Interfaces\InvoiceRepositoryInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Log;
 use PayOS\PayOS;
 
 class InvoiceRepository implements InvoiceRepositoryInterface
@@ -237,6 +237,7 @@ class InvoiceRepository implements InvoiceRepositoryInterface
                 // Nếu trạng thái không phải là completed, đặt ngày thanh toán thành null
                 if ($data['payment_status'] !== 'completed') {
                     $invoice->payment_date = null;
+                    $invoice->transaction_code = null;
                 } else if (isset($data['payment_date'])) {
                     // Nếu trạng thái là completed và có ngày thanh toán, cập nhật ngày
                     $invoice->payment_date = $data['payment_date'];
@@ -470,6 +471,14 @@ class InvoiceRepository implements InvoiceRepositoryInterface
         
         // Lưu lại orderCode gốc để sử dụng trong hệ thống
         $systemOrderCode = 'INV-' . $orderCode;
+
+        foreach ($data['invoice_ids'] as $invoiceId) {
+            DB::table('invoices')
+                ->where('id', $invoiceId)
+                ->update([
+                    'transaction_code' => $systemOrderCode
+                ]);
+        }
         
         // URL trả về sau khi thanh toán
         $returnUrl = config('app.frontend_url') . '/invoice-payment?success=true&orderCode=' . $orderCode . '&invoice_ids=' . implode(',', $data['invoice_ids']);
@@ -511,17 +520,17 @@ class InvoiceRepository implements InvoiceRepositoryInterface
      */
     public function verifyPayosPayment(array $data)
     {
-        $orderCode = $data['orderCode'];
-        $success = $data['success'] ?? false;
+        $orderCode = $data['orderCode'] ?? null;
         $cancel = $data['cancel'] ?? false;
-        $invoiceIds = $data['invoice_ids'] ?? [];
         
-        // Chuyển đổi $invoiceIds từ chuỗi thành mảng nếu cần
-        if (is_string($invoiceIds)) {
-            $invoiceIds = explode(',', $invoiceIds);
+        // Validate orderCode presence
+        if (!$orderCode) {
+            return [
+                'status' => 'FAILED',
+                'message' => 'Thiếu mã đơn hàng (orderCode)',
+            ];
         }
         
-        // Tạo mã giao dịch hiển thị
         $transactionCode = 'INV-' . $orderCode;
         
         // Xử lý khi người dùng hủy thanh toán
@@ -544,71 +553,78 @@ class InvoiceRepository implements InvoiceRepositoryInterface
             
             // Lấy thông tin thanh toán trực tiếp từ Payos
             $paymentInfo = $payos->getPaymentLinkInformation($orderCode);
+                        
+            // Kiểm tra kết quả trả về từ PayOS có hợp lệ không
+            if (!isset($paymentInfo['status'])) {
+                return [
+                    'status' => 'FAILED',
+                    'message' => 'Không thể xác thực thông tin thanh toán từ PayOS',
+                    'orderCode' => $orderCode
+                ];
+            }
             
             // Kiểm tra trạng thái thanh toán thực tế từ Payos
-            $isPaid = isset($paymentInfo['status']) && $paymentInfo['status'] === 'PAID';
+            $isPaid = $paymentInfo['status'] === 'PAID';
             
             // Nếu chưa thanh toán, trả về lỗi
             if (!$isPaid) {
                 return [
                     'status' => 'FAILED',
-                    'message' => 'Trạng thái thanh toán không hợp lệ hoặc chưa thanh toán',
+                    'message' => 'Chưa thanh toán hoặc thanh toán không thành công',
                     'orderCode' => $orderCode
                 ];
             }
             
-            // Tiếp tục xử lý nếu thanh toán thành công
-            if (empty($invoiceIds)) {
+            // Tìm tất cả invoices liên quan dựa trên transaction_code
+            $invoices = Invoice::where('transaction_code', $transactionCode)
+                               ->where('payment_status', '!=', 'completed')
+                               ->get();
+            
+            if ($invoices->isEmpty()) {
                 return [
-                    'status' => 'FAILED',
-                    'message' => 'Thiếu thông tin hóa đơn'
+                    'status' => 'SUCCESS',
+                    'message' => 'Không tìm thấy hóa đơn cần cập nhật',
+                    'orderCode' => $orderCode
                 ];
             }
             
+            // Bắt đầu transaction để đảm bảo tính nhất quán dữ liệu
+            DB::beginTransaction();
+            
             // Cập nhật trạng thái các hóa đơn
-            $alreadyCompletedInvoices = []; // Lưu trữ những hóa đơn đã hoàn thành trước đó
-            $newlyCompletedInvoices = []; // Lưu trữ những hóa đơn mới hoàn thành
+            $updatedInvoiceIds = [];
             $roomId = null;
 
-            foreach ($invoiceIds as $invoiceId) {
-                $invoice = Invoice::find($invoiceId);
-                if ($invoice) {
-                    // Lưu lại room_id để thông báo
-                    $roomId = $invoice->room_id;
-                    
-                    // Kiểm tra nếu hóa đơn đã được thanh toán trước đó
-                    if ($invoice->payment_status === 'completed') {
-                        $alreadyCompletedInvoices[] = $invoiceId;
-                        continue;
-                    }
-
-                    // Lưu trạng thái trước đó
-                    $oldStatus = $invoice->payment_status;
-                    
-                    // Cập nhật thông tin
-                    $invoice->payment_status = 'completed';
-                    $invoice->payment_date = now();
-                    // Tạo transaction_code duy nhất cho từng hóa đơn
-                    $invoice->transaction_code = 'INV-' . $orderCode . '-' . $invoiceId;
-                    $invoice->save();
-                    
-                    // Chỉ thêm vào danh sách hóa đơn mới hoàn thành nếu trạng thái thay đổi
-                    if ($oldStatus !== 'completed') {
-                        $newlyCompletedInvoices[] = $invoiceId;
-                    }
-                }
+            foreach ($invoices as $invoice) {
+                // Lưu lại room_id để thông báo
+                $roomId = $invoice->room_id;
+                
+                // Cập nhật thông tin
+                $invoice->payment_status = 'completed';
+                $invoice->payment_date = now();
+                $invoice->save();
+                
+                $updatedInvoiceIds[] = $invoice->id;
             }
+            
+            DB::commit();
 
             return [
                 'status' => 'SUCCESS',
                 'message' => 'Thanh toán thành công',
-                'invoices' => $invoiceIds,
+                'invoices' => $updatedInvoiceIds,
                 'orderCode' => $orderCode,
                 'transactionCode' => $transactionCode,
-                'new_completed_invoices' => $newlyCompletedInvoices,
+                'new_completed_invoices' => $updatedInvoiceIds,
                 'room_id' => $roomId
             ];
         } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('PayOS payment verification error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'orderCode' => $orderCode
+            ]);
+            
             return [
                 'status' => 'FAILED',
                 'message' => 'Lỗi khi xác thực thanh toán: ' . $e->getMessage(),
