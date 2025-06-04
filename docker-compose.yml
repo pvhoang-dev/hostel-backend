@@ -84,6 +84,20 @@ services:
     depends_on:
       - app
 
+  # Ngrok Service (cho webhook)
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: ngrok
+    restart: unless-stopped
+    ports:
+      - "4040:4040"
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTH_TOKEN}
+    command: http webserver:80
+    networks:
+      - app-network
+    depends_on:
+      - webserver
 # Docker Networks
 networks:
   app-network:
