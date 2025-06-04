@@ -165,6 +165,10 @@ class PaymentMethodService
             throw new \Exception('Bạn không có quyền thực hiện thao tác này', 403);
         }
 
+        if (in_array($id, [1, 2])) {
+            throw new \Exception('Không thể cập nhật phương thức thanh toán mặc định của hệ thống.', 422);
+        }
+
         $paymentMethod = $this->paymentMethodRepository->getById($id);
         
         if (is_null($paymentMethod)) {
@@ -209,6 +213,11 @@ class PaymentMethodService
         // Chỉ admin mới có thể xóa phương thức thanh toán
         if (!$user || $user->role->code !== 'admin') {
             throw new \Exception('Bạn không có quyền thực hiện thao tác này', 403);
+        }
+
+        // Kiểm tra nếu là payment method mặc định
+        if (in_array($id, [1, 2])) {
+            throw new \Exception('Không thể xóa phương thức thanh toán mặc định của hệ thống.', 422);
         }
 
         $paymentMethod = $this->paymentMethodRepository->getById($id);

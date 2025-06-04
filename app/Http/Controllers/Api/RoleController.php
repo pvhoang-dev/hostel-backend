@@ -98,7 +98,7 @@ class RoleController extends BaseController
             return $this->sendError('Lỗi khi cập nhật vai trò', $e->errors(), 422);
         } catch (\Exception $e) {
             $code = method_exists($e, 'getCode') && $e->getCode() ? $e->getCode() : 500;
-            return $this->sendError('Lỗi khi cập nhật vai trò', ['error' => $e->getMessage()], $code);
+            return $this->sendError($e->getMessage(), [], $code);
         }
     }
 
@@ -115,7 +115,7 @@ class RoleController extends BaseController
             return $this->sendResponse([], 'Vai trò đã được xóa thành công.');
         } catch (\Exception $e) {
             $code = method_exists($e, 'getCode') && $e->getCode() ? $e->getCode() : 500;
-            return $this->sendError('Lỗi khi xóa vai trò', ['error' => $e->getMessage()], $code);
+            return $this->sendError($e->getMessage(), [], $code);
         }
     }
 }

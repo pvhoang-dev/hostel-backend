@@ -87,7 +87,7 @@ class ContractSeeder extends Seeder
                     'deposit_status' => 'held',
                     'status' => 'active',
                     'auto_renew' => (bool)$randomRenew,
-                    'time_renew' => $randomRenew ? 6 : null,
+                    'time_renew' => (bool)$randomRenew ? 6 : null,
                     'created_by' => User::whereHas('role', function ($query) {
                         $query->where('code', 'manager');
                     })->inRandomOrder()->first()->id,

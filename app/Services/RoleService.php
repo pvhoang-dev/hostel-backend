@@ -136,6 +136,10 @@ class RoleService
             throw new \Exception('Bạn không có quyền thực hiện thao tác này', 403);
         }
 
+        if (in_array($role->code, ['admin', 'tenant', 'manager'])) {
+            throw new \Exception('Không thể cập nhật vai trò mặc định của hệ thống.', 422);
+        }
+
         $input = $request->all();
 
         $validator = Validator::make($input, [
@@ -168,6 +172,11 @@ class RoleService
         // Only admin can delete roles
         if (!$user || $user->role->code !== 'admin') {
             throw new \Exception('Bạn không có quyền thực hiện thao tác này', 403);
+        }
+
+        // Kiểm tra nếu là role mặc định
+        if (in_array($role->code, ['admin', 'tenant', 'manager'])) {
+            throw new \Exception('Không thể xóa vai trò mặc định của hệ thống.', 422);
         }
 
         return $this->roleRepository->delete($role);
