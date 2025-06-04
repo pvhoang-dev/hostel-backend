@@ -6,8 +6,10 @@ use App\Http\Resources\InvoiceResource;
 use App\Models\Room;
 use App\Models\ServiceUsage;
 use App\Repositories\Interfaces\InvoiceRepositoryInterface;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
@@ -513,6 +515,104 @@ class InvoiceService
             ];
         } catch (\Exception $e) {
             DB::rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Xử lý webhook từ Payos
+     * 
+     * @param Request $request
+     * @return array
+     * @throws \Exception
+     */
+    public function handlePayosWebhook($request)
+    {
+        try {
+            $webhookData = $request->all();
+            
+            // Ghi log dữ liệu webhook
+            Log::info('Payos webhook received', ['data' => $webhookData]);
+            
+            // Khởi tạo SDK PayOS với cấu hình
+            $payos = new \PayOS\PayOS(
+                payos_config('client_id'),
+                payos_config('api_key'),
+                payos_config('checksum_key')
+            );
+            
+            // Xác thực dữ liệu webhook
+            try {
+                $verifiedData = $payos->verifyPaymentWebhookData($webhookData);
+                
+                // Kiểm tra trạng thái thanh toán
+                if (!isset($verifiedData['status']) || $verifiedData['status'] !== 'PAID') {
+                    return ['success' => false, 'message' => 'Payment not completed'];
+                }
+                
+                // Lấy orderCode để tìm hóa đơn liên quan
+                $orderCode = $verifiedData['orderCode'];
+                
+                // Tìm các hóa đơn có transaction_code chứa orderCode
+                $invoices = DB::table('invoices')
+                    ->where('transaction_code', 'like', "%{$orderCode}%")
+                    ->where('payment_status', '!=', 'completed')
+                    ->get();
+                
+                if ($invoices->isEmpty()) {
+                    return ['success' => true, 'message' => 'No invoices found to update'];
+                }
+                
+                // Cập nhật trạng thái hóa đơn
+                $updatedInvoiceIds = [];
+                $roomId = null;
+                
+                foreach ($invoices as $invoice) {
+                    DB::table('invoices')
+                        ->where('id', $invoice->id)
+                        ->update([
+                            'payment_status' => 'completed',
+                            'payment_date' => now(),
+                            'updated_at' => now()
+                        ]);
+                    
+                    $updatedInvoiceIds[] = $invoice->id;
+                    if (!$roomId && isset($invoice->room_id)) {
+                        $roomId = $invoice->room_id;
+                    }
+                }
+                
+                // Gửi thông báo nếu có hóa đơn được cập nhật
+                if (!empty($updatedInvoiceIds) && $roomId) {
+                    if (count($updatedInvoiceIds) > 1) {
+                        $this->notificationService->notifyRoomTenants(
+                            $roomId,
+                            'invoice',
+                            "Các hóa đơn #" . implode(', ', $updatedInvoiceIds) . " đã được thanh toán.",
+                            "/invoices/{$updatedInvoiceIds[0]}",
+                        );
+                    } else {
+                        $this->notificationService->notifyRoomTenants(
+                            $roomId,
+                            'invoice',
+                            "Hóa đơn #{$updatedInvoiceIds[0]} đã được thanh toán.",
+                            "/invoices/{$updatedInvoiceIds[0]}",
+                        );
+                    }
+                }
+                
+                return [
+                    'success' => true,
+                    'message' => 'Payment verified and invoices updated',
+                    'invoices_updated' => $updatedInvoiceIds
+                ];
+                
+            } catch (\Exception $e) {
+                Log::error('Payos webhook verification failed: ' . $e->getMessage());
+                return ['success' => false, 'message' => 'Invalid webhook data: ' . $e->getMessage()];
+            }
+        } catch (\Exception $e) {
+            Log::error('Payos webhook processing error: ' . $e->getMessage());
             throw $e;
         }
     }

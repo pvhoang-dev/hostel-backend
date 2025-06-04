@@ -30,6 +30,9 @@ Route::controller(AuthController::class)->group(function () {
     Route::post('login', 'login');
 });
 
+// Webhook từ Payos (không cần xác thực)
+Route::post('/payment/webhook', [InvoiceController::class, 'handlePayosWebhook']);
+
 Route::middleware('auth:sanctum')->group(function () {
     // Authentication
     Route::post('/logout', [AuthController::class, 'logout']);

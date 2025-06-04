@@ -533,8 +533,31 @@ class InvoiceRepository implements InvoiceRepositoryInterface
             ];
         }
         
-        // Xử lý khi thanh toán thành công
-        if ($success) {
+        // Thay vì tin tưởng tham số từ client, kiểm tra trực tiếp với server Payos
+        try {
+            // Khởi tạo SDK PayOS với cấu hình
+            $payos = new PayOS(
+                payos_config('client_id'),
+                payos_config('api_key'),
+                payos_config('checksum_key')
+            );
+            
+            // Lấy thông tin thanh toán trực tiếp từ Payos
+            $paymentInfo = $payos->getPaymentLinkInformation($orderCode);
+            
+            // Kiểm tra trạng thái thanh toán thực tế từ Payos
+            $isPaid = isset($paymentInfo['status']) && $paymentInfo['status'] === 'PAID';
+            
+            // Nếu chưa thanh toán, trả về lỗi
+            if (!$isPaid) {
+                return [
+                    'status' => 'FAILED',
+                    'message' => 'Trạng thái thanh toán không hợp lệ hoặc chưa thanh toán',
+                    'orderCode' => $orderCode
+                ];
+            }
+            
+            // Tiếp tục xử lý nếu thanh toán thành công
             if (empty($invoiceIds)) {
                 return [
                     'status' => 'FAILED',
@@ -585,11 +608,12 @@ class InvoiceRepository implements InvoiceRepositoryInterface
                 'new_completed_invoices' => $newlyCompletedInvoices,
                 'room_id' => $roomId
             ];
+        } catch (\Exception $e) {
+            return [
+                'status' => 'FAILED',
+                'message' => 'Lỗi khi xác thực thanh toán: ' . $e->getMessage(),
+                'orderCode' => $orderCode
+            ];
         }
-        
-        return [
-            'status' => 'FAILED',
-            'message' => 'Trạng thái thanh toán không hợp lệ'
-        ];
     }
 } 

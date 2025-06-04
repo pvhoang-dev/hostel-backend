@@ -8,6 +8,7 @@ use App\Services\InvoiceService;
 use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class InvoiceController extends BaseController
@@ -277,6 +278,24 @@ class InvoiceController extends BaseController
             }
             
             return $this->sendError('Không thể xử lý thanh toán tiền mặt.', [$message], $code);
+        }
+    }
+
+    /**
+     * Xử lý webhook từ Payos
+     * 
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function handlePayosWebhook(Request $request): JsonResponse
+    {
+        try {
+            $result = $this->invoiceService->handlePayosWebhook($request);
+            return $this->sendResponse($result, 'Webhook processed successfully');
+        } catch (\Exception $e) {
+            Log::error('Payos Webhook Error: ' . $e->getMessage());
+            Log::error($e->getTraceAsString());
+            return $this->sendError('Webhook processing error', [$e->getMessage()], 500);
         }
     }
 }
