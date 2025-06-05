@@ -172,6 +172,13 @@ class EquipmentService
             throw new \Exception('Bạn không có quyền thực hiện thao tác này', 403);
         }
 
+        // Kiểm tra xem thiết bị có đang được sử dụng không
+        if ($equipment->roomEquipments()->count() > 0 || $equipment->storages()->count() > 0) {
+            throw new \Exception('Không thể xóa thiết bị đang được sử dụng', 422);
+        }
+
+
+
         return $this->equipmentRepository->delete($equipment);
     }
-} 
+}
