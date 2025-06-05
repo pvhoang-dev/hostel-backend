@@ -121,16 +121,28 @@ class MonthlyServiceRepository implements MonthlyServiceRepositoryInterface
                 ->where('year', $year)
                 ->first();
 
-            // Get previous month's usage
-            $previousUsage = ServiceUsage::where('room_service_id', $roomService->id)
-                ->where('month', $prevMonth)
-                ->where('year', $prevYear)
-                ->first();
-
             $startMeter = null;
             if ($roomService->service->is_metered) {
-                // If metered service, use previous month's end meter as this month's start
-                $startMeter = $previousUsage ? $previousUsage->end_meter : 0;
+                if (!$currentUsage) {
+                    // Tìm bản ghi usage gần nhất trong quá khứ để lấy end_meter làm start_meter
+                    $lastUsage = ServiceUsage::where('room_service_id', $roomService->id)
+                        ->where(function ($query) use ($month, $year) {
+                            $query->where('year', '<', $year) // Các năm trước
+                                ->orWhere(function ($q) use ($month, $year) {
+                                    $q->where('year', $year) // Hoặc cùng năm nhưng tháng trước
+                                        ->where('month', '<', $month);
+                                });
+                        })
+                        ->orderBy('year', 'desc')
+                        ->orderBy('month', 'desc')
+                        ->first();
+
+                    // Nếu có bản ghi trước đó, lấy end_meter làm start_meter
+                    $startMeter = $lastUsage ? $lastUsage->end_meter : 0;
+                } else {
+                    // Nếu đã có bản ghi hiện tại, giữ nguyên start_meter
+                    $startMeter = $currentUsage->start_meter;
+                }
             }
 
             $result[] = [
