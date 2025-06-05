@@ -59,13 +59,13 @@ class InvoiceController extends BaseController
         } catch (\Exception $e) {
             $code = 500;
             $message = $e->getMessage();
-            
+
             // Check if error message contains status code
             if (preg_match('/:(\d+)$/', $message, $matches)) {
                 $code = intval($matches[1]);
                 $message = preg_replace('/:(\d+)$/', '', $message);
             }
-            
+
             return $this->sendError('Lỗi tạo hóa đơn.', [$message], $code);
         }
     }
@@ -87,13 +87,13 @@ class InvoiceController extends BaseController
         } catch (\Exception $e) {
             $code = 500;
             $message = $e->getMessage();
-            
+
             // Check if error message contains status code
             if (preg_match('/:(\d+)$/', $message, $matches)) {
                 $code = intval($matches[1]);
                 $message = preg_replace('/:(\d+)$/', '', $message);
             }
-            
+
             return $this->sendError('Lỗi khi lấy thông tin hóa đơn.', [$message], $code);
         }
     }
@@ -109,14 +109,14 @@ class InvoiceController extends BaseController
     {
         try {
             $result = $this->invoiceService->updateInvoice($request, $id);
-            
+
             if (isset($result['deleted']) && $result['deleted'] === true) {
                 return $this->sendResponse(
-                    [], 
+                    [],
                     'Invoice đã được xóa do không còn mục nào'
                 );
             }
-            
+
             return $this->sendResponse(
                 new InvoiceResource($result),
                 'Invoice updated successfully.'
@@ -126,13 +126,13 @@ class InvoiceController extends BaseController
         } catch (\Exception $e) {
             $code = 500;
             $message = $e->getMessage();
-            
+
             // Check if error message contains status code
             if (preg_match('/:(\d+)$/', $message, $matches)) {
                 $code = intval($matches[1]);
                 $message = preg_replace('/:(\d+)$/', '', $message);
             }
-            
+
             return $this->sendError('Lỗi cập nhật hóa đơn.', [$message], $code);
         }
     }
@@ -151,13 +151,13 @@ class InvoiceController extends BaseController
         } catch (\Exception $e) {
             $code = 500;
             $message = $e->getMessage();
-            
+
             // Check if error message contains status code
             if (preg_match('/:(\d+)$/', $message, $matches)) {
                 $code = intval($matches[1]);
                 $message = preg_replace('/:(\d+)$/', '', $message);
             }
-            
+
             return $this->sendError('Lỗi xóa hóa đơn.', [$message], $code);
         }
     }
@@ -182,13 +182,13 @@ class InvoiceController extends BaseController
         } catch (\Exception $e) {
             $code = 500;
             $message = $e->getMessage();
-            
+
             // Check if error message contains status code
             if (preg_match('/:(\d+)$/', $message, $matches)) {
                 $code = intval($matches[1]);
                 $message = preg_replace('/:(\d+)$/', '', $message);
             }
-            
+
             return $this->sendError('Lỗi cập nhật trạng thái thanh toán.', [$message], $code);
         }
     }
@@ -212,13 +212,13 @@ class InvoiceController extends BaseController
         } catch (\Exception $e) {
             $code = 500;
             $message = $e->getMessage();
-            
+
             // Check if error message contains status code
             if (preg_match('/:(\d+)$/', $message, $matches)) {
                 $code = intval($matches[1]);
                 $message = preg_replace('/:(\d+)$/', '', $message);
             }
-            
+
             return $this->sendError('Không thể tạo liên kết thanh toán.', [$message], $code);
         }
     }
@@ -240,13 +240,13 @@ class InvoiceController extends BaseController
         } catch (\Exception $e) {
             $code = 500;
             $message = $e->getMessage();
-            
+
             // Check if error message contains status code
             if (preg_match('/:(\d+)$/', $message, $matches)) {
                 $code = intval($matches[1]);
                 $message = preg_replace('/:(\d+)$/', '', $message);
             }
-            
+
             return $this->sendError('Lỗi khi xác thực thanh toán.', [$message], $code);
         }
     }
@@ -270,13 +270,13 @@ class InvoiceController extends BaseController
         } catch (\Exception $e) {
             $code = 500;
             $message = $e->getMessage();
-            
+
             // Check if error message contains status code
             if (preg_match('/:(\d+)$/', $message, $matches)) {
                 $code = intval($matches[1]);
                 $message = preg_replace('/:(\d+)$/', '', $message);
             }
-            
+
             return $this->sendError('Không thể xử lý thanh toán tiền mặt.', [$message], $code);
         }
     }

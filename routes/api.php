@@ -37,7 +37,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Authentication
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/dashboard/stats', [DashboardController::class, 'stats']);
-    
+
     // Statistics
     Route::prefix('statistics')->group(function () {
         Route::get('/overview', [StatisticsController::class, 'overview']);
@@ -91,7 +91,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Invoices
     Route::resource('invoices', InvoiceController::class);
     Route::post('/invoices/{id}/update-payment', [InvoiceController::class, 'updatePaymentStatus']);
-    
+
     // Payment Gateway
     Route::post('/payment/create-link-payment', [InvoiceController::class, 'createPayosPayment']);
     Route::post('/payment/receive-hook', [InvoiceController::class, 'verifyPayosPayment']);
