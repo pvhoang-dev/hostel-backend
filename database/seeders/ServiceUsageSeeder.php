@@ -76,8 +76,12 @@ class ServiceUsageSeeder extends Seeder
                         // Tháng 6: ngẫu nhiên 'pending', 'waiting' hoặc 'completed'
                         $statuses = ['pending', 'waiting', 'completed'];
                         $status = $statuses[array_rand($statuses)];
-                        $invoice->payment_method_id = 1;
                         $invoice->payment_status = $status;
+                        if ($status === 'waiting') {
+                            $invoice->payment_method_id = 2;
+                        } else {
+                            $invoice->payment_method_id = 1;
+                        }
 
                         // Nếu đã thanh toán, thêm thông tin thanh toán
                         if ($status === 'completed') {

@@ -28,10 +28,6 @@ class InvoiceSeeder extends Seeder
             $query->where('code', 'admin');
         })->first();
 
-        // Lấy các phương thức thanh toán
-        $paymentMethods = PaymentMethod::all();
-        $paymentMethodIds = $paymentMethods->pluck('id')->toArray();
-
         // Tạo các hóa đơn tùy chỉnh cho tháng 1, 2, 3 năm 2025
         $months = [4, 5, 6];
         $year = 2025;
@@ -44,9 +40,6 @@ class InvoiceSeeder extends Seeder
             'Phí giữ xe' => [500, 1500],
             'Phí internet tốc độ cao' => [1000, 3000],
         ];
-
-        // Các trạng thái thanh toán
-        $paymentStatuses = ['pending', 'completed', 'waiting', 'pending'];
 
         foreach ($rooms as $room) {
             foreach ($months as $month) {
@@ -93,7 +86,11 @@ class InvoiceSeeder extends Seeder
                             $statuses = ['pending', 'waiting', 'completed'];
                             $status = $statuses[array_rand($statuses)];
                             $invoice->payment_status = $status;
-                            $invoice->payment_method_id = 1;
+                            if ($status === 'waiting') {
+                                $invoice->payment_method_id = 2;
+                            } else {
+                                $invoice->payment_method_id = 1;
+                            }
 
                             // Nếu đã thanh toán, thêm thông tin thanh toán
                             if ($status === 'completed') {
