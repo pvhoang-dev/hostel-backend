@@ -380,12 +380,13 @@ class StatisticsRepository implements StatisticsRepositoryInterface
         $result = [];
         
         if ($period === 'month' || $period === 'monthly') {
-            // Lấy 6 tháng gần nhất
+            // Lấy 12 tháng gần nhất
             for ($i = 0; $i < 12; $i++) {
                 $month = Carbon::now()->subMonths($i);
                 $monthStart = Carbon::create($month->year, $month->month, 1);
                 $monthEnd = $monthStart->copy()->endOfMonth();
                 
+                // Query tất cả hợp đồng trong tháng
                 $query = Contract::whereBetween('start_date', [$monthStart->format('Y-m-d'), $monthEnd->format('Y-m-d')]);
                 
                 // Áp dụng filter house_id nếu có
@@ -395,11 +396,29 @@ class StatisticsRepository implements StatisticsRepositoryInterface
                     });
                 }
                 
-                $count = $query->count();
+                // Đếm số lượng hợp đồng mới (không phải là auto_renew)
+                $newContracts = (clone $query)
+                    ->where('auto_renew', false)
+                    ->get();
+                
+                $newCount = $newContracts->count();
+                
+                // Đếm số hợp đồng gia hạn (có auto_renew = true)
+                $renewalContracts = (clone $query)
+                    ->where('auto_renew', true)
+                    ->get();
+                
+                $renewalCount = $renewalContracts->count();
+                
+                // Tính tổng giá trị hợp đồng mới
+                $totalValue = $newContracts->sum('monthly_price') + $renewalContracts->sum('monthly_price');
                 
                 $result[] = [
                     'period' => 'Tháng ' . $month->month . '/' . $month->year,
-                    'count' => $count
+                    'new_count' => $newCount,
+                    'renewal_count' => $renewalCount,
+                    'total_count' => $newCount + $renewalCount,
+                    'total_value' => $totalValue
                 ];
             }
             
@@ -413,6 +432,7 @@ class StatisticsRepository implements StatisticsRepositoryInterface
                 $quarterStart = Carbon::create($date->year, ($quarterNumber - 1) * 3 + 1, 1)->startOfDay();
                 $quarterEnd = Carbon::create($date->year, $quarterNumber * 3, 1)->endOfMonth();
                 
+                // Query tất cả hợp đồng trong quý
                 $query = Contract::whereBetween('start_date', [$quarterStart->format('Y-m-d'), $quarterEnd->format('Y-m-d')]);
                 
                 // Áp dụng filter house_id nếu có
@@ -422,11 +442,29 @@ class StatisticsRepository implements StatisticsRepositoryInterface
                     });
                 }
                 
-                $count = $query->count();
+                // Đếm số lượng hợp đồng mới (không phải là auto_renew)
+                $newContracts = (clone $query)
+                    ->where('auto_renew', false)
+                    ->get();
+                
+                $newCount = $newContracts->count();
+                
+                // Đếm số hợp đồng gia hạn (có auto_renew = true)
+                $renewalContracts = (clone $query)
+                    ->where('auto_renew', true)
+                    ->get();
+                
+                $renewalCount = $renewalContracts->count();
+                
+                // Tính tổng giá trị hợp đồng mới
+                $totalValue = $newContracts->sum('monthly_price') + $renewalContracts->sum('monthly_price');
                 
                 $result[] = [
                     'period' => 'Quý ' . $quarterNumber . '/' . $date->year,
-                    'count' => $count
+                    'new_count' => $newCount,
+                    'renewal_count' => $renewalCount,
+                    'total_count' => $newCount + $renewalCount,
+                    'total_value' => $totalValue
                 ];
             }
             
@@ -439,6 +477,7 @@ class StatisticsRepository implements StatisticsRepositoryInterface
                 $yearStart = Carbon::createFromDate($year, 1, 1)->startOfDay();
                 $yearEnd = Carbon::createFromDate($year, 12, 31)->endOfDay();
                 
+                // Query tất cả hợp đồng trong năm
                 $query = Contract::whereBetween('start_date', [$yearStart->format('Y-m-d'), $yearEnd->format('Y-m-d')]);
                 
                 // Áp dụng filter house_id nếu có
@@ -448,11 +487,29 @@ class StatisticsRepository implements StatisticsRepositoryInterface
                     });
                 }
                 
-                $count = $query->count();
+                // Đếm số lượng hợp đồng mới (không phải là auto_renew)
+                $newContracts = (clone $query)
+                    ->where('auto_renew', false)
+                    ->get();
+                
+                $newCount = $newContracts->count();
+                
+                // Đếm số hợp đồng gia hạn (có auto_renew = true)
+                $renewalContracts = (clone $query)
+                    ->where('auto_renew', true)
+                    ->get();
+                
+                $renewalCount = $renewalContracts->count();
+                
+                // Tính tổng giá trị hợp đồng mới
+                $totalValue = $newContracts->sum('monthly_price') + $renewalContracts->sum('monthly_price');
                 
                 $result[] = [
                     'period' => 'Năm ' . $year,
-                    'count' => $count
+                    'new_count' => $newCount,
+                    'renewal_count' => $renewalCount,
+                    'total_count' => $newCount + $renewalCount,
+                    'total_value' => $totalValue
                 ];
             }
             
