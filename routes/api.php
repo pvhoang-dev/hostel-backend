@@ -43,9 +43,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/overview', [StatisticsController::class, 'overview']);
         Route::get('/contracts', [StatisticsController::class, 'contracts']);
         Route::get('/revenue', [StatisticsController::class, 'revenue']);
-        Route::get('/services', [StatisticsController::class, 'services']);
         Route::get('/equipment', [StatisticsController::class, 'equipment']);
-        Route::post('/export-report', [StatisticsController::class, 'exportReport']);
     });
 
     // Roles and Permissions

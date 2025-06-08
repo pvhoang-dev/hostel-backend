@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class StatisticsService
 {
@@ -28,8 +29,7 @@ class StatisticsService
      */
     public function getOverview(Request $request)
     {
-        $user = $this->checkAuthentication();
-        $this->checkPermission($user, 'admin');
+        $user = Auth::user();
 
         // Lấy các bộ lọc từ request
         $filters = [
@@ -39,11 +39,19 @@ class StatisticsService
         // Tạo key cache dựa trên user và filters
         $cacheKey = $this->getCacheKey('overview', $user->id, $filters);
 
-        // Thử lấy từ cache trước
+        // Xóa cache để lấy dữ liệu mới nhất
+        Cache::forget($cacheKey);
+
+        // Thử lấy từ cache hoặc tạo mới nếu không có
         return Cache::remember($cacheKey, $this->cacheTtl, function () use ($user, $filters) {
             $overviewStats = $this->statisticsRepository->getOverviewStats($user, $filters);
             $occupancyStats = $this->statisticsRepository->getRoomOccupancyStats($user, $filters);
             $revenueComparison = $this->statisticsRepository->getRevenuePeriodComparison($user, 'month', $filters);
+
+            // Log để debug
+            Log::info('Overview data', [
+                'revenue_comparison' => $revenueComparison
+            ]);
 
             return [
                 'overview' => $overviewStats,
@@ -62,8 +70,7 @@ class StatisticsService
      */
     public function getContractsStats(Request $request)
     {
-        $user = $this->checkAuthentication();
-        $this->checkPermission($user, 'admin');
+        $user = Auth::user();
 
         // Lấy các bộ lọc từ request
         $filters = [
@@ -72,6 +79,18 @@ class StatisticsService
 
         $days = $request->days ?? 30;
         $period = $request->period ?? 'month';
+        
+        // Map frontend period values to backend period values
+        if ($period === 'monthly') {
+            $period = 'month';
+        } else if ($period === 'quarterly') {
+            $period = 'quarter';
+        } else if ($period === 'yearly') {
+            $period = 'year';
+        }
+
+        // Ghi log để debug
+        Log::info('Period after mapping: ' . $period);
 
         // Tạo key cache dựa trên user và filters
         $cacheKey = $this->getCacheKey('contracts', $user->id, array_merge($filters, ['days' => $days, 'period' => $period]));
@@ -99,67 +118,45 @@ class StatisticsService
      */
     public function getRevenueStats(Request $request)
     {
-        $user = $this->checkAuthentication();
-        $this->checkPermission($user, 'admin');
+        $user = Auth::user();
 
         // Lấy các bộ lọc từ request
         $filters = [
             'house_id' => $request->house_id ?? null,
-            'year' => $request->year ?? Carbon::now()->year,
-            'month' => $request->month ?? Carbon::now()->month
+            'year' => $request->year ?? null,
+            'quarter' => $request->quarter ?? null,
+            'period' => $request->period ?? 'monthly', // monthly, quarterly, yearly
+            'filter_type' => 'period', // Luôn là period, bỏ date_range
         ];
 
-        $limit = $request->limit ?? 10;
+        // Lấy thông tin phân trang cho hóa đơn chưa thanh toán
+        $page = $request->page ?? 1;
+        $perPage = $request->per_page ?? 10;
 
         // Tạo key cache dựa trên user và filters
-        $cacheKey = $this->getCacheKey('revenue', $user->id, array_merge($filters, ['limit' => $limit]));
+        $cacheKey = $this->getCacheKey('revenue', $user->id, array_merge($filters, ['page' => $page, 'per_page' => $perPage]));
+
+        // Xóa cache để lấy dữ liệu mới nhất khi thay đổi bộ lọc
+        Cache::forget($cacheKey);
 
         // Thử lấy từ cache trước
-        return Cache::remember($cacheKey, $this->cacheTtl, function () use ($user, $filters, $limit) {
-            $monthlyRevenue = $this->statisticsRepository->getMonthlyRevenueStats($user, $filters['year'], $filters);
+        return Cache::remember($cacheKey, $this->cacheTtl, function () use ($user, $filters, $page, $perPage) {
+            // Lấy dữ liệu doanh thu theo kỳ (tháng/quý/năm)
+            $revenueData = $this->statisticsRepository->getRevenueByPeriod($user, $filters);
+
+            // Lấy thống kê trạng thái hóa đơn
             $invoiceStatus = $this->statisticsRepository->getInvoiceStatusStats($user, $filters);
-            $largestPending = $this->statisticsRepository->getLargestPendingInvoices($user, $limit, $filters);
+            
+            // Log dữ liệu hóa đơn để debug
+            Log::info('Invoice status in service', $invoiceStatus);
+            
+            // Lấy danh sách hóa đơn chưa thanh toán với phân trang
+            $unpaidInvoices = $this->statisticsRepository->getUnpaidInvoices($user, $page, $perPage, $filters);
 
             return [
-                'monthly_revenue' => $monthlyRevenue,
+                'revenue_data' => $revenueData,
                 'invoice_status' => $invoiceStatus,
-                'largest_pending' => $largestPending
-            ];
-        });
-    }
-
-    /**
-     * Lấy thống kê về sử dụng dịch vụ
-     *
-     * @param Request $request
-     * @return array
-     * @throws \Exception
-     */
-    public function getServicesStats(Request $request)
-    {
-        $user = $this->checkAuthentication();
-        $this->checkPermission($user, 'admin');
-
-        // Lấy các bộ lọc từ request
-        $filters = [
-            'house_id' => $request->house_id ?? null,
-            'year' => $request->year ?? Carbon::now()->year,
-            'month' => $request->month ?? Carbon::now()->month
-        ];
-
-        $serviceTypes = $request->service_types ?? ['Điện', 'Nước', 'Internet'];
-
-        // Tạo key cache dựa trên user và filters
-        $cacheKey = $this->getCacheKey('services', $user->id, array_merge($filters, ['service_types' => implode(',', $serviceTypes)]));
-
-        // Thử lấy từ cache trước
-        return Cache::remember($cacheKey, $this->cacheTtl, function () use ($user, $filters, $serviceTypes) {
-            $serviceUsage = $this->statisticsRepository->getMonthlyServiceUsageStats($user, $serviceTypes, $filters['year'], $filters);
-            $serviceRevenue = $this->statisticsRepository->getServiceRevenueComparison($user, $filters);
-
-            return [
-                'service_usage' => $serviceUsage,
-                'service_revenue' => $serviceRevenue
+                'unpaid_invoices' => $unpaidInvoices
             ];
         });
     }
@@ -173,8 +170,7 @@ class StatisticsService
      */
     public function getEquipmentStats(Request $request)
     {
-        $user = $this->checkAuthentication();
-        $this->checkPermission($user, 'admin');
+        $user = Auth::user();
 
         // Lấy các bộ lọc từ request
         $filters = [
@@ -186,67 +182,12 @@ class StatisticsService
 
         // Thử lấy từ cache trước
         return Cache::remember($cacheKey, $this->cacheTtl, function () use ($user, $filters) {
-            $inventoryStats = $this->statisticsRepository->getEquipmentInventoryStats($user, $filters);
-            $missingEquipment = $this->statisticsRepository->getRoomsMissingEquipment($user, $filters);
+            $roomsWithLimitedEquipment = $this->statisticsRepository->getRoomsWithLimitedEquipment($user, 2, $filters);
 
             return [
-                'inventory' => $inventoryStats,
-                'missing_equipment' => $missingEquipment
+                'missing_equipment' => $roomsWithLimitedEquipment
             ];
         });
-    }
-
-    /**
-     * Xuất báo cáo tùy chỉnh
-     *
-     * @param Request $request
-     * @return mixed
-     * @throws \Exception
-     */
-    public function exportCustomReport(Request $request)
-    {
-        $user = $this->checkAuthentication();
-        $this->checkPermission($user, 'admin');
-
-        // Đối với xuất báo cáo, không sử dụng cache để luôn lấy dữ liệu mới nhất
-        return $this->statisticsRepository->generateCustomReport($user, $request);
-    }
-
-    /**
-     * Kiểm tra xác thực người dùng
-     *
-     * @return \App\Models\User
-     * @throws \Exception
-     */
-    protected function checkAuthentication()
-    {
-        $user = Auth::user();
-        if (!$user) {
-            throw new \Exception('Người dùng không được xác thực', 401);
-        }
-        return $user;
-    }
-
-    /**
-     * Kiểm tra quyền truy cập
-     *
-     * @param \App\Models\User $user
-     * @param string $role
-     * @return bool
-     * @throws \Exception
-     */
-    protected function checkPermission($user, $role = 'admin')
-    {
-        if ($user->role && $user->role->code === $role) {
-            return true;
-        }
-
-        // Cho phép manager xem thống kê của nhà mình quản lý
-        if ($role === 'admin' && $user->role && $user->role->code === 'manager') {
-            return true;
-        }
-
-        throw new \Exception('Bạn không có quyền truy cập tính năng này', 403);
     }
 
     /**

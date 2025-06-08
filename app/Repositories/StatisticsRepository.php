@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Repositories\Interfaces\StatisticsRepositoryInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
 class StatisticsRepository implements StatisticsRepositoryInterface
@@ -196,23 +197,23 @@ class StatisticsRepository implements StatisticsRepositoryInterface
         }
         
         // Query doanh thu hiện tại
-        $currentQuery = Invoice::where('payment_status', 'paid');
+        $currentQuery = Invoice::where('payment_status', 'completed');
         
         if ($period === 'month') {
-            $currentQuery->where('month', $currentMonth)
-                         ->where('year', $currentYear);
+            $currentQuery->whereMonth('payment_date', $currentMonth)
+                         ->whereYear('payment_date', $currentYear);
         } else { // year
-            $currentQuery->where('year', $currentYear);
+            $currentQuery->whereYear('payment_date', $currentYear);
         }
         
         // Query doanh thu kỳ trước
-        $previousQuery = Invoice::where('payment_status', 'paid');
+        $previousQuery = Invoice::where('payment_status', 'completed');
         
         if ($period === 'month') {
-            $previousQuery->where('month', $previousMonth)
-                          ->where('year', $previousYear);
+            $previousQuery->whereMonth('payment_date', $previousMonth)
+                          ->whereYear('payment_date', $previousYear);
         } else { // year
-            $previousQuery->where('year', $previousYear);
+            $previousQuery->whereYear('payment_date', $previousYear);
         }
         
         // Áp dụng phân quyền
@@ -250,13 +251,26 @@ class StatisticsRepository implements StatisticsRepositoryInterface
         $currentRevenue = $currentQuery->sum('total_amount');
         $previousRevenue = $previousQuery->sum('total_amount');
         
+        // Log debug info
+        Log::info('Revenue Comparison', [
+            'current_revenue' => $currentRevenue,
+            'previous_revenue' => $previousRevenue,
+            'current_month' => $currentMonth,
+            'current_year' => $currentYear,
+            'previous_month' => $previousMonth,
+            'previous_year' => $previousYear,
+            'period' => $period
+        ]);
+        
         // Tính % tăng/giảm
-        $change = 0;
+        $change = $currentRevenue - $previousRevenue;
         $changePercent = 0;
         
         if ($previousRevenue > 0) {
-            $change = $currentRevenue - $previousRevenue;
             $changePercent = round(($change / $previousRevenue) * 100, 2);
+        } else if ($currentRevenue > 0) {
+            // Nếu doanh thu kỳ trước = 0 và kỳ này > 0, tăng 100%
+            $changePercent = 100;
         }
         
         $periodLabel = $period === 'month' ? 'tháng' : 'năm';
@@ -282,7 +296,7 @@ class StatisticsRepository implements StatisticsRepositoryInterface
      * @param array $filters Các bộ lọc
      * @return array
      */
-    public function getExpiringContracts(User $user, int $days = 30, array $filters = []): array
+    public function getExpiringContracts(User $user, int $days = 45, array $filters = []): array
     {
         $isAdmin = $user->role->code === 'admin';
         $isManager = $user->role->code === 'manager';
@@ -363,74 +377,16 @@ class StatisticsRepository implements StatisticsRepositoryInterface
      */
     public function getNewContractsStats(User $user, string $period = 'month', array $filters = []): array
     {
-        $isAdmin = $user->role->code === 'admin';
-        $isManager = $user->role->code === 'manager';
-        
-        $today = Carbon::today();
         $result = [];
         
-        if ($period === 'week') {
-            // Lấy 4 tuần gần nhất
-            for ($i = 0; $i < 4; $i++) {
-                $weekStart = Carbon::now()->subWeeks($i)->startOfWeek();
-                $weekEnd = Carbon::now()->subWeeks($i)->endOfWeek();
-                
-                $query = Contract::whereBetween('start_date', [$weekStart->format('Y-m-d'), $weekEnd->format('Y-m-d')]);
-                
-                // Áp dụng phân quyền
-                if (!$isAdmin) {
-                    if ($isManager) {
-                        $query->whereHas('room.house', function($q) use ($user) {
-                            $q->where('manager_id', $user->id);
-                        });
-                    } else {
-                        // Tenant chỉ xem được hợp đồng của mình
-                        $query->whereHas('users', function($q) use ($user) {
-                            $q->where('users.id', $user->id);
-                        });
-                    }
-                }
-                
-                // Áp dụng filter house_id nếu có
-                if (isset($filters['house_id'])) {
-                    $query->whereHas('room', function($q) use ($filters) {
-                        $q->where('house_id', $filters['house_id']);
-                    });
-                }
-                
-                $count = $query->count();
-                
-                $result[] = [
-                    'period' => 'Tuần ' . (4 - $i) . ' (' . $weekStart->format('d/m') . ' - ' . $weekEnd->format('d/m') . ')',
-                    'count' => $count
-                ];
-            }
-            
-            // Đảo ngược mảng để tuần cũ nhất ở đầu
-            $result = array_reverse($result);
-            
-        } else { // month
+        if ($period === 'month' || $period === 'monthly') {
             // Lấy 6 tháng gần nhất
-            for ($i = 0; $i < 6; $i++) {
+            for ($i = 0; $i < 12; $i++) {
                 $month = Carbon::now()->subMonths($i);
                 $monthStart = Carbon::create($month->year, $month->month, 1);
                 $monthEnd = $monthStart->copy()->endOfMonth();
                 
                 $query = Contract::whereBetween('start_date', [$monthStart->format('Y-m-d'), $monthEnd->format('Y-m-d')]);
-                
-                // Áp dụng phân quyền
-                if (!$isAdmin) {
-                    if ($isManager) {
-                        $query->whereHas('room.house', function($q) use ($user) {
-                            $q->where('manager_id', $user->id);
-                        });
-                    } else {
-                        // Tenant chỉ xem được hợp đồng của mình
-                        $query->whereHas('users', function($q) use ($user) {
-                            $q->where('users.id', $user->id);
-                        });
-                    }
-                }
                 
                 // Áp dụng filter house_id nếu có
                 if (isset($filters['house_id'])) {
@@ -448,6 +404,59 @@ class StatisticsRepository implements StatisticsRepositoryInterface
             }
             
             // Đảo ngược mảng để tháng cũ nhất ở đầu
+            $result = array_reverse($result);
+        } else if ($period === 'quarterly' || $period === 'quarter') {
+            // Lấy 4 quý gần nhất
+            for ($i = 0; $i < 4; $i++) {
+                $date = Carbon::now()->subQuarters($i);
+                $quarterNumber = ceil($date->month / 3);
+                $quarterStart = Carbon::create($date->year, ($quarterNumber - 1) * 3 + 1, 1)->startOfDay();
+                $quarterEnd = Carbon::create($date->year, $quarterNumber * 3, 1)->endOfMonth();
+                
+                $query = Contract::whereBetween('start_date', [$quarterStart->format('Y-m-d'), $quarterEnd->format('Y-m-d')]);
+                
+                // Áp dụng filter house_id nếu có
+                if (isset($filters['house_id'])) {
+                    $query->whereHas('room', function($q) use ($filters) {
+                        $q->where('house_id', $filters['house_id']);
+                    });
+                }
+                
+                $count = $query->count();
+                
+                $result[] = [
+                    'period' => 'Quý ' . $quarterNumber . '/' . $date->year,
+                    'count' => $count
+                ];
+            }
+            
+            // Đảo ngược mảng để quý cũ nhất ở đầu
+            $result = array_reverse($result);
+        } else if ($period === 'yearly' || $period === 'year') {
+            // Lấy 3 năm gần nhất
+            for ($i = 0; $i < 3; $i++) {
+                $year = Carbon::now()->subYears($i)->year;
+                $yearStart = Carbon::createFromDate($year, 1, 1)->startOfDay();
+                $yearEnd = Carbon::createFromDate($year, 12, 31)->endOfDay();
+                
+                $query = Contract::whereBetween('start_date', [$yearStart->format('Y-m-d'), $yearEnd->format('Y-m-d')]);
+                
+                // Áp dụng filter house_id nếu có
+                if (isset($filters['house_id'])) {
+                    $query->whereHas('room', function($q) use ($filters) {
+                        $q->where('house_id', $filters['house_id']);
+                    });
+                }
+                
+                $count = $query->count();
+                
+                $result[] = [
+                    'period' => 'Năm ' . $year,
+                    'count' => $count
+                ];
+            }
+            
+            // Đảo ngược mảng để năm cũ nhất ở đầu
             $result = array_reverse($result);
         }
         
@@ -526,6 +535,41 @@ class StatisticsRepository implements StatisticsRepositoryInterface
     }
 
     /**
+     * Lấy doanh thu theo loại kỳ báo cáo (tháng/quý/năm)
+     *
+     * @param User $user Người dùng hiện tại
+     * @param array $filters Các bộ lọc
+     * @return array
+     */
+    public function getRevenueByPeriod(User $user, array $filters = []): array
+    {
+        $isAdmin = $user->role->code === 'admin';
+        $isManager = $user->role->code === 'manager';
+        
+        $period = $filters['period'] ?? 'monthly';
+        $year = $filters['year'] ?? Carbon::now()->year;
+        
+        // Luôn trả về dữ liệu đầy đủ dựa theo loại kỳ
+        if ($period === 'monthly') {
+            // Luôn trả về dữ liệu 12 tháng của năm được chọn
+            return $this->getMonthlyRevenueStats($user, $year, $filters);
+        }
+        
+        if ($period === 'quarterly') {
+            // Luôn trả về dữ liệu 4 quý của năm được chọn
+            return $this->getQuarterlyRevenueStats($user, $year, null, $filters);
+        }
+        
+        if ($period === 'yearly') {
+            // Trả về dữ liệu 5 năm gần nhất
+            return $this->getYearlyRevenueStats($user, null, $filters);
+        }
+        
+        // Mặc định trả về theo tháng
+        return $this->getMonthlyRevenueStats($user, $year, $filters);
+    }
+
+    /**
      * Lấy doanh thu theo tháng trong năm
      *
      * @param User $user Người dùng hiện tại
@@ -558,8 +602,11 @@ class StatisticsRepository implements StatisticsRepositoryInterface
             DB::raw('SUM(total_amount) as total_revenue')
         )
         ->where('year', $year)
-        ->where('payment_status', 'paid')
-        ->groupBy('month');
+        ->where(function($query) {
+            $query->where('payment_status', 'completed');
+        });
+        
+        $revenueQuery->groupBy('month');
         
         // Áp dụng phân quyền
         if (!$isAdmin) {
@@ -590,10 +637,208 @@ class StatisticsRepository implements StatisticsRepositoryInterface
             $result[$data->month]['revenue'] = (int) $data->total_revenue;
         }
         
+        $title = "Doanh thu theo tháng năm $year";
+        
         // Format kết quả
         return [
             'year' => $year,
+            'title' => $title,
             'monthly_data' => array_values($result)
+        ];
+    }
+    
+    /**
+     * Lấy doanh thu theo quý trong năm
+     *
+     * @param User $user Người dùng hiện tại
+     * @param int $year Năm
+     * @param int $quarter Quý (1-4), nếu null thì lấy tất cả các quý
+     * @param array $filters Các bộ lọc
+     * @return array
+     */
+    public function getQuarterlyRevenueStats(User $user, int $year = null, int $quarter = null, array $filters = []): array
+    {
+        $isAdmin = $user->role->code === 'admin';
+        $isManager = $user->role->code === 'manager';
+        
+        // Nếu không có năm thì lấy năm hiện tại
+        if ($year === null) {
+            $year = Carbon::now()->year;
+        }
+        
+        // Tính tháng bắt đầu và kết thúc của quý
+        $startMonth = ($quarter - 1) * 3 + 1;
+        $endMonth = $quarter * 3;
+        
+        // Lấy dữ liệu theo tháng để tổng hợp theo quý
+        $monthlyData = $this->getMonthlyRevenueStats($user, $year, $filters);
+        $monthlyDataArray = $monthlyData['monthly_data'];
+        
+        // Tổng hợp dữ liệu theo quý
+        $quarterlyData = [];
+        if ($quarter !== null) {
+            // Nếu có quý cụ thể, chỉ tính cho quý đó
+            $quarterlyData = [
+                'quarter' => $quarter,
+                'revenue' => 0
+            ];
+            
+            // Tính tổng doanh thu cho quý
+            foreach ($monthlyDataArray as $data) {
+                $month = $data['month'];
+                if ($month >= $startMonth && $month <= $endMonth) {
+                    $quarterlyData['revenue'] += $data['revenue'];
+                }
+            }
+            
+            $title = "Doanh thu quý $quarter năm $year";
+        } else {
+            // Nếu không có quý cụ thể, tính cho tất cả các quý
+            for ($q = 1; $q <= 4; $q++) {
+                $quarterlyData[$q] = [
+                    'quarter' => $q,
+                    'revenue' => 0
+                ];
+                
+                $qStartMonth = ($q - 1) * 3 + 1;
+                $qEndMonth = $q * 3;
+                
+                // Tính tổng doanh thu cho từng quý
+                foreach ($monthlyDataArray as $data) {
+                    $month = $data['month'];
+                    if ($month >= $qStartMonth && $month <= $qEndMonth) {
+                        $quarterlyData[$q]['revenue'] += $data['revenue'];
+                    }
+                }
+            }
+            
+            $quarterlyData = array_values($quarterlyData);
+            $title = "Doanh thu theo quý năm $year";
+        }
+        
+        // Format kết quả
+        return [
+            'year' => $year,
+            'title' => $title,
+            'quarterly_data' => $quarter !== null ? [$quarterlyData] : $quarterlyData
+        ];
+    }
+    
+    /**
+     * Lấy doanh thu theo năm
+     *
+     * @param User $user Người dùng hiện tại
+     * @param int $year Năm cụ thể, nếu null thì lấy 5 năm gần nhất
+     * @param array $filters Các bộ lọc
+     * @return array
+     */
+    public function getYearlyRevenueStats(User $user, int $year = null, array $filters = []): array
+    {
+        $isAdmin = $user->role->code === 'admin';
+        $isManager = $user->role->code === 'manager';
+        
+        // Nếu có năm cụ thể, lấy doanh thu của năm đó
+        if ($year !== null) {
+            // Tính tổng doanh thu của năm
+            $revenueQuery = Invoice::select(
+                DB::raw('SUM(total_amount) as total_revenue')
+            )
+            ->where('year', $year)
+            ->where('payment_status', 'completed');
+            
+            // Áp dụng phân quyền
+            if (!$isAdmin) {
+                if ($isManager) {
+                    $revenueQuery->whereHas('room.house', function($q) use ($user) {
+                        $q->where('manager_id', $user->id);
+                    });
+                } else {
+                    // Tenant chỉ xem được hóa đơn của phòng mình
+                    $revenueQuery->whereHas('room.contracts.users', function($q) use ($user) {
+                        $q->where('users.id', $user->id);
+                    });
+                }
+            }
+            
+            // Áp dụng filter house_id nếu có
+            if (isset($filters['house_id'])) {
+                $revenueQuery->whereHas('room', function($q) use ($filters) {
+                    $q->where('house_id', $filters['house_id']);
+                });
+            }
+            
+            // Thực hiện query
+            $revenue = $revenueQuery->first()->total_revenue ?? 0;
+            
+            return [
+                'title' => "Doanh thu năm $year",
+                'yearly_data' => [
+                    [
+                        'year' => $year,
+                        'revenue' => (int) $revenue
+                    ]
+                ]
+            ];
+        }
+        
+        // Nếu không có năm cụ thể, lấy doanh thu 5 năm gần nhất
+        $currentYear = Carbon::now()->year;
+        $startYear = $currentYear - 4; // 5 năm gần nhất
+        
+        // Query doanh thu theo năm
+        $revenueQuery = Invoice::select(
+            'year',
+            DB::raw('SUM(total_amount) as total_revenue')
+        )
+        ->where('payment_status', 'completed')
+        ->where('year', '>=', $startYear)
+        ->where('year', '<=', $currentYear)
+        ->groupBy('year')
+        ->orderBy('year');
+        
+        // Áp dụng phân quyền
+        if (!$isAdmin) {
+            if ($isManager) {
+                $revenueQuery->whereHas('room.house', function($q) use ($user) {
+                    $q->where('manager_id', $user->id);
+                });
+            } else {
+                // Tenant chỉ xem được hóa đơn của phòng mình
+                $revenueQuery->whereHas('room.contracts.users', function($q) use ($user) {
+                    $q->where('users.id', $user->id);
+                });
+            }
+        }
+        
+        // Áp dụng filter house_id nếu có
+        if (isset($filters['house_id'])) {
+            $revenueQuery->whereHas('room', function($q) use ($filters) {
+                $q->where('house_id', $filters['house_id']);
+            });
+        }
+        
+        // Thực hiện query
+        $revenueData = $revenueQuery->get();
+        
+        // Tạo mảng kết quả
+        $result = [];
+        for ($y = $startYear; $y <= $currentYear; $y++) {
+            $result[$y] = [
+                'year' => $y,
+                'revenue' => 0
+            ];
+        }
+        
+        // Cập nhật dữ liệu vào mảng kết quả
+        foreach ($revenueData as $data) {
+            if (isset($result[$data->year])) {
+                $result[$data->year]['revenue'] = (int) $data->total_revenue;
+            }
+        }
+        
+        return [
+            'title' => "Doanh thu theo năm",
+            'yearly_data' => array_values($result)
         ];
     }
 
@@ -616,18 +861,6 @@ class StatisticsRepository implements StatisticsRepositoryInterface
         // Áp dụng filter khoảng thời gian nếu có
         if (isset($filters['year'])) {
             $query->where('year', $filters['year']);
-        }
-        
-        if (isset($filters['month'])) {
-            $query->where('month', $filters['month']);
-        }
-        
-        if (isset($filters['from_date'])) {
-            $query->where('created_at', '>=', $filters['from_date']);
-        }
-        
-        if (isset($filters['to_date'])) {
-            $query->where('created_at', '<=', $filters['to_date']);
         }
         
         // Áp dụng phân quyền
@@ -656,15 +889,14 @@ class StatisticsRepository implements StatisticsRepositoryInterface
         
         // Format kết quả
         $result = [
-            'paid' => 0,
-            'pending' => 0,
-            'cancelled' => 0,
-            'partial' => 0
+            'completed' => 0,
+            'waiting' => 0,
+            'pending' => 0
         ];
         
         foreach ($stats as $stat) {
             if (isset($result[$stat->payment_status])) {
-                $result[$stat->payment_status] = $stat->total;
+                $result[$stat->payment_status] = (int) $stat->total;
             }
         }
         
@@ -675,22 +907,27 @@ class StatisticsRepository implements StatisticsRepositoryInterface
     }
 
     /**
-     * Lấy danh sách hóa đơn có giá trị lớn đang chờ thanh toán
+     * Lấy danh sách hóa đơn chưa thanh toán với phân trang
      *
      * @param User $user Người dùng hiện tại
-     * @param int $limit Giới hạn kết quả
+     * @param int $page Trang hiện tại
+     * @param int $perPage Số bản ghi mỗi trang
      * @param array $filters Các bộ lọc
      * @return array
      */
-    public function getLargestPendingInvoices(User $user, int $limit = 10, array $filters = []): array
+    public function getUnpaidInvoices(User $user, int $page = 1, int $perPage = 10, array $filters = []): array
     {
         $isAdmin = $user->role->code === 'admin';
         $isManager = $user->role->code === 'manager';
         
         // Query cơ bản
-        $query = Invoice::where('payment_status', 'pending')
-                     ->orderBy('total_amount', 'desc')
-                     ->with(['room', 'room.house', 'items']);
+        $query = Invoice::where(function($q) {
+                // Include all non-completed statuses
+                $q->where('payment_status', 'pending')
+                  ->orWhere('payment_status', 'waiting');
+            })
+            ->orderBy('created_at', 'desc') // Order by created date, newest first
+            ->with(['room', 'room.house', 'items']);
         
         // Áp dụng phân quyền
         if (!$isAdmin) {
@@ -713,8 +950,12 @@ class StatisticsRepository implements StatisticsRepositoryInterface
             });
         }
         
-        // Lấy dữ liệu với limit
-        $invoices = $query->limit($limit)->get();
+        // Tính tổng số bản ghi để phân trang
+        $total = $query->count();
+        
+        // Phân trang
+        $offset = ($page - 1) * $perPage;
+        $invoices = $query->skip($offset)->take($perPage)->get();
         
         // Format kết quả
         $result = [];
@@ -742,301 +983,40 @@ class StatisticsRepository implements StatisticsRepositoryInterface
                 'total_amount' => $invoice->total_amount,
                 'month' => $invoice->month,
                 'year' => $invoice->year,
+                'payment_status' => $invoice->payment_status,
                 'created_at' => $invoice->created_at->format('Y-m-d H:i:s')
             ];
         }
         
-        return $result;
-    }
-
-    /**
-     * Lấy thống kê sử dụng dịch vụ theo tháng
-     *
-     * @param User $user Người dùng hiện tại
-     * @param array $serviceTypes Loại dịch vụ
-     * @param int $year Năm
-     * @param array $filters Các bộ lọc
-     * @return array
-     */
-    public function getMonthlyServiceUsageStats(User $user, array $serviceTypes, int $year = null, array $filters = []): array
-    {
-        $isAdmin = $user->role->code === 'admin';
-        $isManager = $user->role->code === 'manager';
-        
-        // Nếu không có năm thì lấy năm hiện tại
-        if ($year === null) {
-            $year = Carbon::now()->year;
-        }
-        
-        // Mảng kết quả - 12 tháng
-        $result = [];
-        foreach ($serviceTypes as $serviceType) {
-            $result[$serviceType] = [];
-            for ($month = 1; $month <= 12; $month++) {
-                $result[$serviceType][$month] = [
-                    'month' => $month,
-                    'usage' => 0,
-                    'revenue' => 0
-                ];
-            }
-        }
-        
-        // Query sử dụng dịch vụ theo tháng
-        $usageQuery = ServiceUsage::select(
-            'service_usage.month', 
-            'services.name as service_name',
-            DB::raw('SUM(service_usage.usage_value) as total_usage'),
-            DB::raw('SUM(service_usage.usage_value * service_usage.price_used) as total_revenue')
-        )
-        ->join('room_services', 'service_usage.room_service_id', '=', 'room_services.id')
-        ->join('services', 'room_services.service_id', '=', 'services.id')
-        ->where('service_usage.year', $year)
-        ->whereIn('services.name', $serviceTypes)
-        ->groupBy('service_usage.month', 'services.name');
-        
-        // Áp dụng phân quyền
-        if (!$isAdmin) {
-            if ($isManager) {
-                $usageQuery->join('rooms', 'room_services.room_id', '=', 'rooms.id')
-                          ->join('houses', 'rooms.house_id', '=', 'houses.id')
-                          ->where('houses.manager_id', $user->id);
-            } else {
-                // Tenant chỉ xem được sử dụng dịch vụ của phòng mình
-                $usageQuery->join('rooms', 'room_services.room_id', '=', 'rooms.id')
-                          ->whereHas('rooms.contracts.users', function($q) use ($user) {
-                              $q->where('users.id', $user->id);
-                          });
-            }
-        }
-        
-        // Áp dụng filter house_id nếu có
-        if (isset($filters['house_id'])) {
-            $usageQuery->join('rooms', 'room_services.room_id', '=', 'rooms.id')
-                       ->where('rooms.house_id', $filters['house_id']);
-        }
-        
-        // Thực hiện query
-        $usageData = $usageQuery->get();
-        
-        // Cập nhật dữ liệu vào mảng kết quả
-        foreach ($usageData as $data) {
-            if (isset($result[$data->service_name][$data->month])) {
-                $result[$data->service_name][$data->month]['usage'] = (float) $data->total_usage;
-                $result[$data->service_name][$data->month]['revenue'] = (int) $data->total_revenue;
-            }
-        }
-        
-        // Format kết quả
-        $formattedResult = [];
-        foreach ($serviceTypes as $serviceType) {
-            $formattedResult[$serviceType] = [
-                'service_name' => $serviceType,
-                'monthly_data' => array_values($result[$serviceType])
-            ];
-        }
-        
         return [
-            'year' => $year,
-            'services' => $formattedResult
+            'data' => $result,
+            'total' => $total,
+            'per_page' => $perPage,
+            'current_page' => $page,
+            'last_page' => ceil($total / $perPage)
         ];
     }
-
+    
     /**
-     * Lấy so sánh doanh thu từ dịch vụ theo loại
+     * Lấy danh sách phòng có số lượng thiết bị ít hơn hoặc bằng giới hạn
      *
      * @param User $user Người dùng hiện tại
+     * @param int $limit Giới hạn số lượng thiết bị
      * @param array $filters Các bộ lọc
      * @return array
      */
-    public function getServiceRevenueComparison(User $user, array $filters = []): array
+    public function getRoomsWithLimitedEquipment(User $user, int $limit = 2, array $filters = []): array
     {
         $isAdmin = $user->role->code === 'admin';
-        $isManager = $user->role->code === 'manager';
-        
-        // Năm và tháng mặc định
-        $year = $filters['year'] ?? Carbon::now()->year;
-        $month = $filters['month'] ?? Carbon::now()->month;
-        
-        // Query doanh thu dịch vụ không cố định (service_usage)
-        $variableQuery = ServiceUsage::select(DB::raw('SUM(usage_value * price_used) as total_revenue'))
-                                  ->where('year', $year);
-        
-        // Query doanh thu dịch vụ cố định (invoice_items với is_fixed)
-        $fixedQuery = InvoiceItem::select(DB::raw('SUM(amount) as total_revenue'))
-                                ->join('invoices', 'invoice_items.invoice_id', '=', 'invoices.id')
-                                ->where('invoices.year', $year)
-                                ->where('invoice_items.type', 'custom')
-                                ->whereExists(function ($query) {
-                                    $query->select(DB::raw(1))
-                                          ->from('room_services')
-                                          ->whereRaw('invoice_items.description LIKE CONCAT("%", room_services.description, "%")')
-                                          ->where('room_services.is_fixed', 1);
-                                });
-        
-        // Áp dụng filter tháng nếu có
-        if (isset($filters['month'])) {
-            $variableQuery->where('month', $filters['month']);
-            $fixedQuery->where('invoices.month', $filters['month']);
-        }
-        
-        // Áp dụng phân quyền
-        if (!$isAdmin) {
-            if ($isManager) {
-                // Dịch vụ không cố định
-                $variableQuery->join('room_services', 'service_usage.room_service_id', '=', 'room_services.id')
-                            ->join('rooms', 'room_services.room_id', '=', 'rooms.id')
-                            ->join('houses', 'rooms.house_id', '=', 'houses.id')
-                            ->where('houses.manager_id', $user->id);
-                
-                // Dịch vụ cố định
-                $fixedQuery->join('rooms', 'invoices.room_id', '=', 'rooms.id')
-                          ->join('houses', 'rooms.house_id', '=', 'houses.id')
-                          ->where('houses.manager_id', $user->id);
-            } else {
-                // Tenant chỉ xem được doanh thu dịch vụ của phòng mình
-                // Dịch vụ không cố định
-                $variableQuery->join('room_services', 'service_usage.room_service_id', '=', 'room_services.id')
-                            ->join('rooms', 'room_services.room_id', '=', 'rooms.id')
-                            ->join('contracts', 'rooms.id', '=', 'contracts.room_id')
-                            ->join('contract_users', 'contracts.id', '=', 'contract_users.contract_id')
-                            ->where('contract_users.user_id', $user->id)
-                            ->where('contracts.status', 'active');
-                
-                // Dịch vụ cố định
-                $fixedQuery->join('rooms', 'invoices.room_id', '=', 'rooms.id')
-                          ->join('contracts', 'rooms.id', '=', 'contracts.room_id')
-                          ->join('contract_users', 'contracts.id', '=', 'contract_users.contract_id')
-                          ->where('contract_users.user_id', $user->id)
-                          ->where('contracts.status', 'active');
-            }
-        }
-        
-        // Áp dụng filter house_id nếu có
-        if (isset($filters['house_id'])) {
-            // Dịch vụ không cố định
-            $variableQuery->join('room_services', 'service_usage.room_service_id', '=', 'room_services.id')
-                         ->join('rooms', 'room_services.room_id', '=', 'rooms.id')
-                         ->where('rooms.house_id', $filters['house_id']);
-            
-            // Dịch vụ cố định
-            $fixedQuery->join('rooms', 'invoices.room_id', '=', 'rooms.id')
-                       ->where('rooms.house_id', $filters['house_id']);
-        }
-        
-        // Thực hiện query
-        $variableRevenue = $variableQuery->first()->total_revenue ?? 0;
-        $fixedRevenue = $fixedQuery->first()->total_revenue ?? 0;
-        
-        // Format kết quả
-        $total = $variableRevenue + $fixedRevenue;
-        $variablePercent = $total > 0 ? round(($variableRevenue / $total) * 100, 2) : 0;
-        $fixedPercent = $total > 0 ? round(($fixedRevenue / $total) * 100, 2) : 0;
-        
-        return [
-            'year' => $year,
-            'month' => $month ?? null,
-            'variable_revenue' => $variableRevenue,
-            'variable_percent' => $variablePercent,
-            'fixed_revenue' => $fixedRevenue,
-            'fixed_percent' => $fixedPercent,
-            'total_revenue' => $total
-        ];
-    }
-
-    /**
-     * Lấy thống kê thiết bị trong kho theo nhà
-     *
-     * @param User $user Người dùng hiện tại
-     * @param array $filters Các bộ lọc
-     * @return array
-     */
-    public function getEquipmentInventoryStats(User $user, array $filters = []): array
-    {
-        $isAdmin = $user->role->code === 'admin';
-        $isManager = $user->role->code === 'manager';
-        
-        // Query cơ bản
-        $query = EquipmentStorage::select(
-                    'equipment_storage.house_id',
-                    'houses.name as house_name',
-                    'equipments.id as equipment_id',
-                    'equipments.name as equipment_name',
-                    DB::raw('SUM(equipment_storage.quantity) as total_quantity')
-                )
-                ->join('houses', 'equipment_storage.house_id', '=', 'houses.id')
-                ->join('equipments', 'equipment_storage.equipment_id', '=', 'equipments.id')
-                ->groupBy('equipment_storage.house_id', 'houses.name', 'equipments.id', 'equipments.name');
-        
-        // Áp dụng phân quyền
-        if (!$isAdmin) {
-            if ($isManager) {
-                $query->where('houses.manager_id', $user->id);
-            } else {
-                // Tenant chỉ xem được kho của nhà mình đang ở
-                $query->whereHas('house.rooms.contracts.users', function($q) use ($user) {
-                    $q->where('users.id', $user->id)
-                      ->where('contracts.status', 'active');
-                });
-            }
-        }
-        
-        // Áp dụng filter house_id nếu có
-        if (isset($filters['house_id'])) {
-            $query->where('equipment_storage.house_id', $filters['house_id']);
-        }
-        
-        // Thực hiện query
-        $inventoryData = $query->get();
-        
-        // Format kết quả
-        $result = [];
-        foreach ($inventoryData as $data) {
-            if (!isset($result[$data->house_id])) {
-                $result[$data->house_id] = [
-                    'house_id' => $data->house_id,
-                    'house_name' => $data->house_name,
-                    'equipments' => []
-                ];
-            }
-            
-            $result[$data->house_id]['equipments'][] = [
-                'equipment_id' => $data->equipment_id,
-                'equipment_name' => $data->equipment_name,
-                'quantity' => $data->total_quantity
-            ];
-        }
-        
-        return array_values($result);
-    }
-
-    /**
-     * Lấy danh sách phòng thiếu thiết bị so với định mức
-     *
-     * @param User $user Người dùng hiện tại
-     * @param array $filters Các bộ lọc
-     * @return array
-     */
-    public function getRoomsMissingEquipment(User $user, array $filters = []): array
-    {
-        $isAdmin = $user->role->code === 'admin';
-        $isManager = $user->role->code === 'manager';
         
         // Lấy danh sách phòng
-        $roomsQuery = Room::with(['house', 'equipments', 'equipments.equipment']);
+        $roomsQuery = Room::with(['house', 'equipments'])
+            ->withCount('equipments as equipment_count')
+            ->having('equipment_count', '<=', $limit);
         
-        // Áp dụng phân quyền
+        // Chỉ admin được xem
         if (!$isAdmin) {
-            if ($isManager) {
-                $roomsQuery->whereHas('house', function($q) use ($user) {
-                    $q->where('manager_id', $user->id);
-                });
-            } else {
-                // Tenant chỉ xem được phòng mình đang ở
-                $roomsQuery->whereHas('contracts.users', function($q) use ($user) {
-                    $q->where('users.id', $user->id)
-                      ->where('contracts.status', 'active');
-                });
-            }
+            return [];
         }
         
         // Áp dụng filter house_id nếu có
@@ -1047,128 +1027,31 @@ class StatisticsRepository implements StatisticsRepositoryInterface
         // Thực hiện query
         $rooms = $roomsQuery->get();
         
-        // Lấy danh sách thiết bị tiêu chuẩn cho mỗi phòng
-        // Giả định: Có bảng cài đặt với định mức thiết bị cần thiết cho mỗi phòng
-        // Nếu không có, có thể dựa vào thiết lập cứng hoặc cấu hình hệ thống
-        $standardEquipments = [
-            'Giường' => 1,
-            'Bàn học' => 1,
-            'Tủ quần áo' => 1,
-            'Điều hòa' => 1
-        ];
-        
         // Format kết quả
         $result = [];
-        foreach ($rooms as $room) {
-            $missingEquipments = [];
-            
-            // Thiết bị hiện có trong phòng
-            $existingEquipments = [];
-            foreach ($room->equipments as $roomEquipment) {
-                $equipmentName = $roomEquipment->equipment->name;
-                $existingEquipments[$equipmentName] = $roomEquipment->quantity;
-            }
-            
-            // Kiểm tra thiếu thiết bị
-            foreach ($standardEquipments as $equipment => $requiredQuantity) {
-                $currentQuantity = $existingEquipments[$equipment] ?? 0;
-                if ($currentQuantity < $requiredQuantity) {
-                    $missingEquipments[] = [
-                        'equipment_name' => $equipment,
-                        'required_quantity' => $requiredQuantity,
-                        'current_quantity' => $currentQuantity,
-                        'missing_quantity' => $requiredQuantity - $currentQuantity
-                    ];
-                }
-            }
-            
-            // Chỉ thêm vào kết quả nếu có thiết bị thiếu
-            if (count($missingEquipments) > 0) {
-                $result[] = [
-                    'room_id' => $room->id,
-                    'room_number' => $room->room_number,
-                    'house_id' => $room->house_id,
-                    'house_name' => $room->house->name,
-                    'missing_equipments' => $missingEquipments
+        foreach ($rooms as $room) {         
+            $warning = "Phòng này " . ($room->equipment_count === 0 ? "không có" : "chỉ có {$room->equipment_count} thiết bị") . ", có thể thiếu trang thiết bị cần thiết";
+
+            $roomEquipments = [];
+
+            foreach ($room->equipments as $equipment) {
+                $roomEquipments[] = [
+                    'equipment_name' => $equipment->equipment->name,
+                    'quantity' => $equipment->quantity
                 ];
             }
+
+            $result[] = [
+                'room_id' => $room->id,
+                'room_number' => $room->room_number,
+                'house_id' => $room->house_id,
+                'house_name' => $room->house->name,
+                'equipment_count' => $room->equipment_count,
+                'equipments' => $roomEquipments,
+                'warning' => $warning
+            ];
         }
         
         return $result;
-    }
-
-    /**
-     * Xuất báo cáo tùy chỉnh
-     *
-     * @param User $user Người dùng hiện tại
-     * @param Request $request
-     * @return mixed
-     */
-    public function generateCustomReport(User $user, Request $request): mixed
-    {
-        $reportType = $request->input('report_type');
-        $startDate = $request->input('start_date');
-        $endDate = $request->input('end_date');
-        $houseId = $request->input('house_id');
-        $format = $request->input('format', 'json'); // json, csv, pdf
-        
-        $filters = [
-            'start_date' => $startDate,
-            'end_date' => $endDate,
-            'house_id' => $houseId
-        ];
-        
-        // Dữ liệu báo cáo dựa trên loại
-        $reportData = [];
-        
-        switch ($reportType) {
-            case 'overview':
-                $reportData = $this->getOverviewStats($user, $filters);
-                break;
-                
-            case 'occupancy':
-                $reportData = $this->getRoomOccupancyStats($user, $filters);
-                break;
-                
-            case 'revenue':
-                $year = $request->input('year', Carbon::now()->year);
-                $reportData = $this->getMonthlyRevenueStats($user, $year, $filters);
-                break;
-                
-            case 'contracts':
-                $days = $request->input('days', 30);
-                $reportData = $this->getExpiringContracts($user, $days, $filters);
-                break;
-                
-            case 'services':
-                $year = $request->input('year', Carbon::now()->year);
-                $serviceTypes = $request->input('service_types', ['Điện', 'Nước']);
-                $reportData = $this->getMonthlyServiceUsageStats($user, $serviceTypes, $year, $filters);
-                break;
-                
-            case 'equipment':
-                $reportData = $this->getEquipmentInventoryStats($user, $filters);
-                break;
-                
-            case 'invoices':
-                $reportData = $this->getInvoiceStatusStats($user, $filters);
-                break;
-                
-            default:
-                throw new \Exception('Loại báo cáo không hợp lệ');
-        }
-        
-        // Xử lý dữ liệu dựa trên định dạng xuất
-        if ($format === 'json') {
-            return $reportData;
-        } else if ($format === 'csv') {
-            // Trong thực tế, sẽ có xử lý export CSV ở đây
-            return $reportData; // Placeholder
-        } else if ($format === 'pdf') {
-            // Trong thực tế, sẽ có xử lý export PDF ở đây
-            return $reportData; // Placeholder
-        }
-        
-        return $reportData;
     }
 }

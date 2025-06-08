@@ -84,59 +84,32 @@ interface StatisticsRepositoryInterface
     public function getInvoiceStatusStats(User $user, array $filters = []): array;
 
     /**
-     * Lấy danh sách hóa đơn có giá trị lớn đang chờ thanh toán
+     * Lấy danh sách phòng có số lượng thiết bị ít hơn hoặc bằng giới hạn
      *
      * @param User $user Người dùng hiện tại
-     * @param int $limit Giới hạn kết quả
+     * @param int $limit Giới hạn số lượng thiết bị
      * @param array $filters Các bộ lọc
      * @return array
      */
-    public function getLargestPendingInvoices(User $user, int $limit = 10, array $filters = []): array;
+    public function getRoomsWithLimitedEquipment(User $user, int $limit = 2, array $filters = []): array;
 
     /**
-     * Lấy thống kê sử dụng dịch vụ theo tháng
-     *
-     * @param User $user Người dùng hiện tại
-     * @param array $serviceTypes Loại dịch vụ
-     * @param int $year Năm
-     * @param array $filters Các bộ lọc
-     * @return array
-     */
-    public function getMonthlyServiceUsageStats(User $user, array $serviceTypes, int $year = null, array $filters = []): array;
-
-    /**
-     * Lấy so sánh doanh thu từ dịch vụ theo loại
+     * Lấy doanh thu theo loại kỳ báo cáo (tháng/quý/năm)
      *
      * @param User $user Người dùng hiện tại
      * @param array $filters Các bộ lọc
      * @return array
      */
-    public function getServiceRevenueComparison(User $user, array $filters = []): array;
+    public function getRevenueByPeriod(User $user, array $filters = []): array;
 
     /**
-     * Lấy thống kê thiết bị trong kho theo nhà
+     * Lấy danh sách hóa đơn chưa thanh toán với phân trang
      *
      * @param User $user Người dùng hiện tại
+     * @param int $page Trang hiện tại
+     * @param int $perPage Số bản ghi mỗi trang
      * @param array $filters Các bộ lọc
      * @return array
      */
-    public function getEquipmentInventoryStats(User $user, array $filters = []): array;
-
-    /**
-     * Lấy danh sách phòng thiếu thiết bị so với định mức
-     *
-     * @param User $user Người dùng hiện tại
-     * @param array $filters Các bộ lọc
-     * @return array
-     */
-    public function getRoomsMissingEquipment(User $user, array $filters = []): array;
-
-    /**
-     * Xuất báo cáo tùy chỉnh
-     *
-     * @param User $user Người dùng hiện tại
-     * @param Request $request
-     * @return mixed
-     */
-    public function generateCustomReport(User $user, Request $request): mixed;
+    public function getUnpaidInvoices(User $user, int $page = 1, int $perPage = 10, array $filters = []): array;
 } 
