@@ -6,14 +6,12 @@ use App\Repositories\Interfaces\StatisticsRepositoryInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
-use Carbon\Carbon;
-use Illuminate\Support\Facades\Log;
 
 class StatisticsService
 {
     protected $statisticsRepository;
     protected $cachePrefix = 'statistics_';
-    protected $cacheTtl = 3600; // 1 giờ
+    protected $cacheTtl = 1200;
 
     public function __construct(StatisticsRepositoryInterface $statisticsRepository)
     {
@@ -39,19 +37,11 @@ class StatisticsService
         // Tạo key cache dựa trên user và filters
         $cacheKey = $this->getCacheKey('overview', $user->id, $filters);
 
-        // Xóa cache để lấy dữ liệu mới nhất
-        Cache::forget($cacheKey);
-
         // Thử lấy từ cache hoặc tạo mới nếu không có
         return Cache::remember($cacheKey, $this->cacheTtl, function () use ($user, $filters) {
             $overviewStats = $this->statisticsRepository->getOverviewStats($user, $filters);
             $occupancyStats = $this->statisticsRepository->getRoomOccupancyStats($user, $filters);
             $revenueComparison = $this->statisticsRepository->getRevenuePeriodComparison($user, 'month', $filters);
-
-            // Log để debug
-            Log::info('Overview data', [
-                'revenue_comparison' => $revenueComparison
-            ]);
 
             return [
                 'overview' => $overviewStats,
@@ -88,9 +78,6 @@ class StatisticsService
         } else if ($period === 'yearly') {
             $period = 'year';
         }
-
-        // Ghi log để debug
-        Log::info('Period after mapping: ' . $period);
 
         // Tạo key cache dựa trên user và filters
         $cacheKey = $this->getCacheKey('contracts', $user->id, array_merge($filters, ['days' => $days, 'period' => $period]));
@@ -136,9 +123,6 @@ class StatisticsService
         // Tạo key cache dựa trên user và filters
         $cacheKey = $this->getCacheKey('revenue', $user->id, array_merge($filters, ['page' => $page, 'per_page' => $perPage]));
 
-        // Xóa cache để lấy dữ liệu mới nhất khi thay đổi bộ lọc
-        Cache::forget($cacheKey);
-
         // Thử lấy từ cache trước
         return Cache::remember($cacheKey, $this->cacheTtl, function () use ($user, $filters, $page, $perPage) {
             // Lấy dữ liệu doanh thu theo kỳ (tháng/quý/năm)
@@ -146,9 +130,6 @@ class StatisticsService
 
             // Lấy thống kê trạng thái hóa đơn
             $invoiceStatus = $this->statisticsRepository->getInvoiceStatusStats($user, $filters);
-            
-            // Log dữ liệu hóa đơn để debug
-            Log::info('Invoice status in service', $invoiceStatus);
             
             // Lấy danh sách hóa đơn chưa thanh toán với phân trang
             $unpaidInvoices = $this->statisticsRepository->getUnpaidInvoices($user, $page, $perPage, $filters);
