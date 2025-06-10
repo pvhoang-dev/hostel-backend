@@ -100,14 +100,6 @@ class MonthlyServiceRepository implements MonthlyServiceRepositoryInterface
             ->where('invoice_type', 'service_usage')
             ->first();
 
-        // Get previous month/year for meter reading comparisons
-        $prevMonth = $month - 1;
-        $prevYear = $year;
-        if ($prevMonth < 1) {
-            $prevMonth = 12;
-            $prevYear = $year - 1;
-        }
-
         $roomServices = RoomService::with(['service'])
             ->where('room_id', $roomId)
             ->where('status', 'active')
@@ -158,7 +150,7 @@ class MonthlyServiceRepository implements MonthlyServiceRepositoryInterface
                 'usage_value' => $currentUsage ? $currentUsage->usage_value : null,
                 'price_used' => $currentUsage ? $currentUsage->price_used : $roomService->price,
                 'has_usage' => (bool) $currentUsage,
-                'can_edit' => !$currentUsage // Cho phép chỉnh sửa nếu chưa có bản ghi
+                'can_edit' => !$currentUsage
             ];
         }
 

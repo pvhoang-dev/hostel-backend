@@ -132,7 +132,7 @@ class EquipmentService
         $user = Auth::user();
 
         // Chỉ cho phép admin và manager cập nhật thiết bị
-        if (!$user || !in_array($user->role->code, ['admin', 'manager'])) {
+        if (!$user || !in_array($user->role->code, ['admin'])) {
             throw new \Exception('Bạn không có quyền thực hiện thao tác này', 403);
         }
 
@@ -168,7 +168,7 @@ class EquipmentService
         $user = Auth::user();
 
         // Chỉ cho phép admin và manager xóa thiết bị
-        if (!$user || !in_array($user->role->code, ['admin', 'manager'])) {
+        if (!$user || !in_array($user->role->code, ['admin'])) {
             throw new \Exception('Bạn không có quyền thực hiện thao tác này', 403);
         }
 

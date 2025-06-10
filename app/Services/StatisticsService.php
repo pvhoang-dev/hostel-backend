@@ -112,8 +112,8 @@ class StatisticsService
             'house_id' => $request->house_id ?? null,
             'year' => $request->year ?? null,
             'quarter' => $request->quarter ?? null,
-            'period' => $request->period ?? 'monthly', // monthly, quarterly, yearly
-            'filter_type' => 'period', // Luôn là period, bỏ date_range
+            'period' => $request->period ?? 'monthly',
+            'filter_type' => 'period',
         ];
 
         // Lấy thông tin phân trang cho hóa đơn chưa thanh toán

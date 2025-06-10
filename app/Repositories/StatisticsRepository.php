@@ -5,15 +5,9 @@ namespace App\Repositories;
 use App\Models\Contract;
 use App\Models\House;
 use App\Models\Invoice;
-use App\Models\InvoiceItem;
 use App\Models\Room;
-use App\Models\RoomEquipment;
-use App\Models\Service;
-use App\Models\ServiceUsage;
-use App\Models\EquipmentStorage;
 use App\Models\User;
 use App\Repositories\Interfaces\StatisticsRepositoryInterface;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
@@ -29,22 +23,7 @@ class StatisticsRepository implements StatisticsRepositoryInterface
      */
     public function getOverviewStats(User $user, array $filters = []): array
     {
-        $isAdmin = $user->role->code === 'admin';
-        $isManager = $user->role->code === 'manager';
-
-        // Lấy nhà trọ theo quyền
         $housesQuery = House::query();
-        if (!$isAdmin) {
-            if ($isManager) {
-                $housesQuery->where('manager_id', $user->id);
-            } else {
-                // Tenant chỉ xem được nhà mình đang ở
-                $housesQuery->whereHas('rooms.contracts.users', function($q) use ($user) {
-                    $q->where('users.id', $user->id)
-                      ->where('contracts.status', 'active');
-                });
-            }
-        }
 
         // Áp dụng filter house_id nếu có
         if (isset($filters['house_id'])) {
@@ -55,19 +34,6 @@ class StatisticsRepository implements StatisticsRepositoryInterface
 
         // Lấy số phòng
         $roomsQuery = Room::query();
-        if (!$isAdmin) {
-            if ($isManager) {
-                $roomsQuery->whereHas('house', function($q) use ($user) {
-                    $q->where('manager_id', $user->id);
-                });
-            } else {
-                // Tenant chỉ xem được phòng mình đang ở
-                $roomsQuery->whereHas('contracts.users', function($q) use ($user) {
-                    $q->where('users.id', $user->id)
-                      ->where('contracts.status', 'active');
-                });
-            }
-        }
 
         // Áp dụng filter house_id nếu có
         if (isset($filters['house_id'])) {
@@ -78,18 +44,6 @@ class StatisticsRepository implements StatisticsRepositoryInterface
 
         // Lấy số hợp đồng đang hoạt động
         $contractsQuery = Contract::where('status', 'active');
-        if (!$isAdmin) {
-            if ($isManager) {
-                $contractsQuery->whereHas('room.house', function($q) use ($user) {
-                    $q->where('manager_id', $user->id);
-                });
-            } else {
-                // Tenant chỉ xem được hợp đồng của mình
-                $contractsQuery->whereHas('users', function($q) use ($user) {
-                    $q->where('users.id', $user->id);
-                });
-            }
-        }
 
         // Áp dụng filter house_id nếu có
         if (isset($filters['house_id'])) {
@@ -178,9 +132,6 @@ class StatisticsRepository implements StatisticsRepositoryInterface
      */
     public function getRevenuePeriodComparison(User $user, string $period = 'month', array $filters = []): array
     {
-        $isAdmin = $user->role->code === 'admin';
-        $isManager = $user->role->code === 'manager';
-        
         // Lấy tháng và năm hiện tại
         $currentDate = Carbon::now();
         $currentMonth = $currentDate->month;
@@ -216,27 +167,6 @@ class StatisticsRepository implements StatisticsRepositoryInterface
             $previousQuery->whereYear('payment_date', $previousYear);
         }
         
-        // Áp dụng phân quyền
-        if (!$isAdmin) {
-            if ($isManager) {
-                $managerHouses = House::where('manager_id', $user->id)->pluck('id')->toArray();
-                $currentQuery->whereHas('room', function($q) use ($managerHouses) {
-                    $q->whereIn('house_id', $managerHouses);
-                });
-                $previousQuery->whereHas('room', function($q) use ($managerHouses) {
-                    $q->whereIn('house_id', $managerHouses);
-                });
-            } else {
-                // Tenant chỉ xem được hóa đơn của phòng mình
-                $currentQuery->whereHas('room.contracts.users', function($q) use ($user) {
-                    $q->where('users.id', $user->id);
-                });
-                $previousQuery->whereHas('room.contracts.users', function($q) use ($user) {
-                    $q->where('users.id', $user->id);
-                });
-            }
-        }
-        
         // Áp dụng filter house_id nếu có
         if (isset($filters['house_id'])) {
             $currentQuery->whereHas('room', function($q) use ($filters) {
@@ -250,17 +180,6 @@ class StatisticsRepository implements StatisticsRepositoryInterface
         // Tính tổng doanh thu
         $currentRevenue = $currentQuery->sum('total_amount');
         $previousRevenue = $previousQuery->sum('total_amount');
-        
-        // Log debug info
-        Log::info('Revenue Comparison', [
-            'current_revenue' => $currentRevenue,
-            'previous_revenue' => $previousRevenue,
-            'current_month' => $currentMonth,
-            'current_year' => $currentYear,
-            'previous_month' => $previousMonth,
-            'previous_year' => $previousYear,
-            'period' => $period
-        ]);
         
         // Tính % tăng/giảm
         $change = $currentRevenue - $previousRevenue;
@@ -297,10 +216,7 @@ class StatisticsRepository implements StatisticsRepositoryInterface
      * @return array
      */
     public function getExpiringContracts(User $user, int $days = 45, array $filters = []): array
-    {
-        $isAdmin = $user->role->code === 'admin';
-        $isManager = $user->role->code === 'manager';
-        
+    {   
         // Lấy ngày hiện tại và ngày kết thúc
         $today = Carbon::today();
         $endDate = Carbon::today()->addDays($days);
@@ -310,20 +226,6 @@ class StatisticsRepository implements StatisticsRepositoryInterface
                                 ->where('end_date', '>=', $today->format('Y-m-d'))
                                 ->where('end_date', '<=', $endDate->format('Y-m-d'))
                                 ->with(['room', 'room.house', 'users']);
-        
-        // Áp dụng phân quyền
-        if (!$isAdmin) {
-            if ($isManager) {
-                $contractsQuery->whereHas('room.house', function($q) use ($user) {
-                    $q->where('manager_id', $user->id);
-                });
-            } else {
-                // Tenant chỉ xem được hợp đồng của mình
-                $contractsQuery->whereHas('users', function($q) use ($user) {
-                    $q->where('users.id', $user->id);
-                });
-            }
-        }
         
         // Áp dụng filter house_id nếu có
         if (isset($filters['house_id'])) {
@@ -521,7 +423,7 @@ class StatisticsRepository implements StatisticsRepositoryInterface
     }
 
     /**
-     * Lấy thống kê khách thuê theo nhà và theo độ tuổi
+     * Lấy thống kê khách thuê theo nhà
      *
      * @param User $user Người dùng hiện tại
      * @param array $filters Các bộ lọc
@@ -529,23 +431,8 @@ class StatisticsRepository implements StatisticsRepositoryInterface
      */
     public function getTenantStats(User $user, array $filters = []): array
     {
-        $isAdmin = $user->role->code === 'admin';
-        $isManager = $user->role->code === 'manager';
-        
         // Lấy danh sách nhà theo quyền
         $housesQuery = House::query();
-        
-        if (!$isAdmin) {
-            if ($isManager) {
-                $housesQuery->where('manager_id', $user->id);
-            } else {
-                // Tenant chỉ xem được nhà mình đang ở
-                $housesQuery->whereHas('rooms.contracts.users', function($q) use ($user) {
-                    $q->where('users.id', $user->id)
-                      ->where('contracts.status', 'active');
-                });
-            }
-        }
         
         // Áp dụng filter house_id nếu có
         if (isset($filters['house_id'])) {
@@ -556,15 +443,6 @@ class StatisticsRepository implements StatisticsRepositoryInterface
         
         $result = [
             'by_house' => [],
-            'by_age' => [
-                'under_18' => 0,
-                '18_to_25' => 0,
-                '26_to_35' => 0,
-                '36_to_45' => 0,
-                '46_to_55' => 0,
-                'over_55' => 0,
-                'unknown' => 0
-            ]
         ];
         
         // Thống kê theo nhà
@@ -599,10 +477,7 @@ class StatisticsRepository implements StatisticsRepositoryInterface
      * @return array
      */
     public function getRevenueByPeriod(User $user, array $filters = []): array
-    {
-        $isAdmin = $user->role->code === 'admin';
-        $isManager = $user->role->code === 'manager';
-        
+    {   
         $period = $filters['period'] ?? 'monthly';
         $year = $filters['year'] ?? Carbon::now()->year;
         
@@ -636,9 +511,6 @@ class StatisticsRepository implements StatisticsRepositoryInterface
      */
     public function getMonthlyRevenueStats(User $user, int $year = null, array $filters = []): array
     {
-        $isAdmin = $user->role->code === 'admin';
-        $isManager = $user->role->code === 'manager';
-        
         // Nếu không có năm thì lấy năm hiện tại
         if ($year === null) {
             $year = Carbon::now()->year;
@@ -664,20 +536,6 @@ class StatisticsRepository implements StatisticsRepositoryInterface
         });
         
         $revenueQuery->groupBy('month');
-        
-        // Áp dụng phân quyền
-        if (!$isAdmin) {
-            if ($isManager) {
-                $revenueQuery->whereHas('room.house', function($q) use ($user) {
-                    $q->where('manager_id', $user->id);
-                });
-            } else {
-                // Tenant chỉ xem được hóa đơn của phòng mình
-                $revenueQuery->whereHas('room.contracts.users', function($q) use ($user) {
-                    $q->where('users.id', $user->id);
-                });
-            }
-        }
         
         // Áp dụng filter house_id nếu có
         if (isset($filters['house_id'])) {
@@ -714,10 +572,7 @@ class StatisticsRepository implements StatisticsRepositoryInterface
      * @return array
      */
     public function getQuarterlyRevenueStats(User $user, int $year = null, int $quarter = null, array $filters = []): array
-    {
-        $isAdmin = $user->role->code === 'admin';
-        $isManager = $user->role->code === 'manager';
-        
+    {   
         // Nếu không có năm thì lấy năm hiện tại
         if ($year === null) {
             $year = Carbon::now()->year;
@@ -791,9 +646,6 @@ class StatisticsRepository implements StatisticsRepositoryInterface
      */
     public function getYearlyRevenueStats(User $user, int $year = null, array $filters = []): array
     {
-        $isAdmin = $user->role->code === 'admin';
-        $isManager = $user->role->code === 'manager';
-        
         // Nếu có năm cụ thể, lấy doanh thu của năm đó
         if ($year !== null) {
             // Tính tổng doanh thu của năm
@@ -803,19 +655,7 @@ class StatisticsRepository implements StatisticsRepositoryInterface
             ->where('year', $year)
             ->where('payment_status', 'completed');
             
-            // Áp dụng phân quyền
-            if (!$isAdmin) {
-                if ($isManager) {
-                    $revenueQuery->whereHas('room.house', function($q) use ($user) {
-                        $q->where('manager_id', $user->id);
-                    });
-                } else {
-                    // Tenant chỉ xem được hóa đơn của phòng mình
-                    $revenueQuery->whereHas('room.contracts.users', function($q) use ($user) {
-                        $q->where('users.id', $user->id);
-                    });
-                }
-            }
+
             
             // Áp dụng filter house_id nếu có
             if (isset($filters['house_id'])) {
@@ -852,20 +692,6 @@ class StatisticsRepository implements StatisticsRepositoryInterface
         ->where('year', '<=', $currentYear)
         ->groupBy('year')
         ->orderBy('year');
-        
-        // Áp dụng phân quyền
-        if (!$isAdmin) {
-            if ($isManager) {
-                $revenueQuery->whereHas('room.house', function($q) use ($user) {
-                    $q->where('manager_id', $user->id);
-                });
-            } else {
-                // Tenant chỉ xem được hóa đơn của phòng mình
-                $revenueQuery->whereHas('room.contracts.users', function($q) use ($user) {
-                    $q->where('users.id', $user->id);
-                });
-            }
-        }
         
         // Áp dụng filter house_id nếu có
         if (isset($filters['house_id'])) {
@@ -908,9 +734,6 @@ class StatisticsRepository implements StatisticsRepositoryInterface
      */
     public function getInvoiceStatusStats(User $user, array $filters = []): array
     {
-        $isAdmin = $user->role->code === 'admin';
-        $isManager = $user->role->code === 'manager';
-        
         // Query cơ bản
         $query = Invoice::select('payment_status', DB::raw('count(*) as total'))
                      ->groupBy('payment_status');
@@ -918,20 +741,6 @@ class StatisticsRepository implements StatisticsRepositoryInterface
         // Áp dụng filter khoảng thời gian nếu có
         if (isset($filters['year'])) {
             $query->where('year', $filters['year']);
-        }
-        
-        // Áp dụng phân quyền
-        if (!$isAdmin) {
-            if ($isManager) {
-                $query->whereHas('room.house', function($q) use ($user) {
-                    $q->where('manager_id', $user->id);
-                });
-            } else {
-                // Tenant chỉ xem được hóa đơn của phòng mình
-                $query->whereHas('room.contracts.users', function($q) use ($user) {
-                    $q->where('users.id', $user->id);
-                });
-            }
         }
         
         // Áp dụng filter house_id nếu có
@@ -974,9 +783,6 @@ class StatisticsRepository implements StatisticsRepositoryInterface
      */
     public function getUnpaidInvoices(User $user, int $page = 1, int $perPage = 10, array $filters = []): array
     {
-        $isAdmin = $user->role->code === 'admin';
-        $isManager = $user->role->code === 'manager';
-        
         // Query cơ bản
         $query = Invoice::where(function($q) {
                 // Include all non-completed statuses
@@ -985,20 +791,6 @@ class StatisticsRepository implements StatisticsRepositoryInterface
             })
             ->orderBy('created_at', 'desc') // Order by created date, newest first
             ->with(['room', 'room.house', 'items']);
-        
-        // Áp dụng phân quyền
-        if (!$isAdmin) {
-            if ($isManager) {
-                $query->whereHas('room.house', function($q) use ($user) {
-                    $q->where('manager_id', $user->id);
-                });
-            } else {
-                // Tenant chỉ xem được hóa đơn của phòng mình
-                $query->whereHas('room.contracts.users', function($q) use ($user) {
-                    $q->where('users.id', $user->id);
-                });
-            }
-        }
         
         // Áp dụng filter house_id nếu có
         if (isset($filters['house_id'])) {
@@ -1064,17 +856,10 @@ class StatisticsRepository implements StatisticsRepositoryInterface
      */
     public function getRoomsWithLimitedEquipment(User $user, int $limit = 2, array $filters = []): array
     {
-        $isAdmin = $user->role->code === 'admin';
-        
         // Lấy danh sách phòng
         $roomsQuery = Room::with(['house', 'equipments'])
             ->withCount('equipments as equipment_count')
             ->having('equipment_count', '<=', $limit);
-        
-        // Chỉ admin được xem
-        if (!$isAdmin) {
-            return [];
-        }
         
         // Áp dụng filter house_id nếu có
         if (isset($filters['house_id'])) {

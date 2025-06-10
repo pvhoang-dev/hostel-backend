@@ -118,18 +118,9 @@ class RequestCommentRepository implements RequestCommentRepositoryInterface
             return true;
         }
 
-        // Tenants can only access requests they sent or received
-        if ($user->role->code === 'tenant') {
+        // Tenants and managers can only access requests they sent or received
+        if ($user->role->code === 'tenant' || $user->role->code === 'manager') {
             return $user->id === $request->sender_id || $user->id === $request->recipient_id;
-        }
-
-        // Managers can access requests they sent/received or from their houses
-        if ($user->role->code === 'manager') {
-            if ($user->id === $request->sender_id || $user->id === $request->recipient_id) {
-                return true;
-            }
-
-            return $user->id === $request->room->house->manager_id;
         }
 
         return false;

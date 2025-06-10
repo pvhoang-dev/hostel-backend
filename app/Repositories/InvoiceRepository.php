@@ -487,7 +487,7 @@ class InvoiceRepository implements InvoiceRepositoryInterface
         // Tạo đơn hàng
         $order = [
             'amount' => $data['amount'],
-            'description' => $data['description'] ?? 'Thanh toán HĐ',
+            'description' => 'Thanh toán HĐ',
             'orderCode' => $orderCode,
             'returnUrl' => $returnUrl,
             'cancelUrl' => $cancelUrl
