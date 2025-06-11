@@ -121,7 +121,6 @@ class UserSeeder extends Seeder
                     'vehicle_plate' => $faker->boolean(80) ? $faker->numerify('##') . $faker->randomLetter . $faker->randomLetter . ' - ' . $faker->numerify('######') : null,
                     'status' => 'active',
                     'role_id' => $tenantRole->id,
-                    'notification_preferences' => json_encode(['email' => $faker->boolean(70), 'sms' => $faker->boolean(30)]),
                     'description' => $description
                 ]
             );

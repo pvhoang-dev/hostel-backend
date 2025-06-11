@@ -20,6 +20,7 @@ class Contract extends Model
         'termination_reason',
         'status',
         'auto_renew',
+        'time_renew',
         'created_by',
         'updated_by'
     ];

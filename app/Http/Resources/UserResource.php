@@ -26,8 +26,6 @@ class UserResource extends JsonResource
                     'code' => $this->role->code,
                 ];
             }),
-            'avatar_url'       => $this->avatar_url,
-            'notification_preferences' => $this->notification_preferences,
             'created_at'       => $this->created_at->format('h:m:s d/m/Y'),
             'updated_at'       => $this->updated_at->format('h:m:s d/m/Y'),
             'deleted_at'       => $this->deleted_at ? $this->deleted_at->format('H:i:s d/m/Y') : null,

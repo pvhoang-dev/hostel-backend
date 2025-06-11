@@ -10,7 +10,6 @@ use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\MonthlyServiceController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PaymentMethodController;
-use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\RequestCommentController;
 use App\Http\Controllers\Api\RequestController;
 use App\Http\Controllers\Api\RoleController;
@@ -22,6 +21,8 @@ use App\Http\Controllers\Api\ServiceUsageController;
 use App\Http\Controllers\Api\StorageController;
 use App\Http\Controllers\Api\SystemSettingController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\ConfigController;
+use App\Http\Controllers\Api\StatisticsController;
 use Illuminate\Support\Facades\Route;
 
 Route::controller(AuthController::class)->group(function () {
@@ -29,18 +30,30 @@ Route::controller(AuthController::class)->group(function () {
     Route::post('login', 'login');
 });
 
+// Webhook từ Payos (không cần xác thực)
+Route::post('/payment/webhook', [InvoiceController::class, 'handlePayosWebhook']);
+
 Route::middleware('auth:sanctum')->group(function () {
     // Authentication
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/dashboard/stats', [DashboardController::class, 'stats']);
 
+    // Statistics
+    Route::prefix('statistics')->group(function () {
+        Route::get('/overview', [StatisticsController::class, 'overview']);
+        Route::get('/contracts', [StatisticsController::class, 'contracts']);
+        Route::get('/revenue', [StatisticsController::class, 'revenue']);
+        Route::get('/equipment', [StatisticsController::class, 'equipment']);
+    });
+
     // Roles and Permissions
     Route::resource('roles', RoleController::class);
-    Route::resource('permissions', PermissionController::class);
 
     // Users
     Route::resource('users', UserController::class);
     Route::post('/users/change-password/{id}', [UserController::class, 'changePassword']);
+    Route::get('tenant/{tenantId}/managers', [UserController::class, 'getManagersForTenant']);
+    Route::get('manager/{managerId}/tenants', [UserController::class, 'getTenantsForManager']);
 
     Route::resource('notifications', NotificationController::class);
     Route::post('notifications/mark-all-as-read', [NotificationController::class, 'markAllAsRead']);
@@ -76,10 +89,15 @@ Route::middleware('auth:sanctum')->group(function () {
     // Invoices
     Route::resource('invoices', InvoiceController::class);
     Route::post('/invoices/{id}/update-payment', [InvoiceController::class, 'updatePaymentStatus']);
-    
+
     // Payment Gateway
     Route::post('/payment/create-link-payment', [InvoiceController::class, 'createPayosPayment']);
     Route::post('/payment/receive-hook', [InvoiceController::class, 'verifyPayosPayment']);
+    Route::post('/payment/update-cash', [InvoiceController::class, 'updateCashPayment']);
+
+    // Config Management
+    Route::resource('configs', ConfigController::class);
+    Route::get('/configs/group/payos', [ConfigController::class, 'getPayosConfigs']);
 
     // Payment Methods
     Route::resource('payment-methods', PaymentMethodController::class);

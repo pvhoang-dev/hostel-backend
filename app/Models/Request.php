@@ -10,7 +10,6 @@ class Request extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'room_id',
         'sender_id',
         'recipient_id',
         'request_type',

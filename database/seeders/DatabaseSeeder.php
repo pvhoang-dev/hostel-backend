@@ -27,6 +27,11 @@ class DatabaseSeeder extends Seeder
             StorageSeeder::class,
             ContractSeeder::class,
             PaymentMethodSeeder::class,
+            ServiceUsageSeeder::class,
+            InvoiceSeeder::class,
+            RequestSeeder::class,
+            RequestCommentSeeder::class,
+            NotificationSeeder::class
         ]);
     }
 }

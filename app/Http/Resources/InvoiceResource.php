@@ -28,8 +28,8 @@ class InvoiceResource extends JsonResource
             'transaction_code' => $this->transaction_code,
             'payment_status' => $this->payment_status,
             'payment_date' => $this->payment_date,
-            'created_at'     => $this->created_at->format('h:m:s d/m/Y'),
-            'updated_at'     => $this->updated_at->format('h:m:s d/m/Y'),
+            'created_at'     => $this->created_at->format('d/m/Y'),
+            'updated_at'     => $this->updated_at->format('d/m/Y'),
         ];
     }
 }

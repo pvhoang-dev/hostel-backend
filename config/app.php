@@ -15,7 +15,7 @@ return [
 
     'name' => env('APP_NAME', 'Laravel'),
 
-    'version' => '0.1.0',
+    'version' => '1.0.0',
 
     'frontend_url' => env('FRONTEND_URL', 'http://localhost:3000'),
 

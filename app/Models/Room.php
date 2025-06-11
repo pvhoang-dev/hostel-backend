@@ -25,11 +25,6 @@ class Room extends Model
         return $this->belongsTo(House::class);
     }
 
-    public function priceHistories()
-    {
-        return $this->hasMany(RoomPriceHistory::class);
-    }
-
     public function equipments()
     {
         return $this->hasMany(RoomEquipment::class);
@@ -58,14 +53,14 @@ class Room extends Model
 
         static::deleting(function ($room) {
             if (!$room->isForceDeleting()) {
-                foreach ($room->priceHistories as $history) {
-                    $history->delete();
-                }
                 foreach ($room->equipments as $equipment) {
                     $equipment->delete();
                 }
                 foreach ($room->services as $service) {
                     $service->delete();
+                }
+                foreach ($room->contracts as $contract) {
+                    $contract->delete();
                 }
             }
         });

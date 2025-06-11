@@ -4,98 +4,33 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\BaseController as BaseController;
 use App\Http\Resources\RequestCommentResource;
-use App\Models\Request;
-use App\Models\RequestComment;
+use App\Services\RequestCommentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request as HttpRequest;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 
 class RequestCommentController extends BaseController
 {
+    protected $requestCommentService;
+
+    public function __construct(RequestCommentService $requestCommentService)
+    {
+        $this->requestCommentService = $requestCommentService;
+    }
+
     /**
      * Display a listing of the resource.
      */
     public function index(HttpRequest $httpRequest): JsonResponse
     {
-        $user = Auth::user();
-        $query = RequestComment::query();
-
-        // Filter by request_id (required)
-        if (!$httpRequest->has('request_id')) {
-            return $this->sendError('Validation Error.', ['request_id' => 'Request ID is required']);
+        try {
+            $result = $this->requestCommentService->getAllComments($httpRequest);
+            return $this->sendResponse($result, 'Bình luận đã được lấy thành công.');
+        } catch (ValidationException $e) {
+            return $this->sendError('Lỗi dữ liệu.', $e->errors(), 422);
+        } catch (\Exception $e) {
+            return $this->sendError($e->getMessage());
         }
-
-        $request = Request::with('room.house')->find($httpRequest->request_id);
-        if (!$request) {
-            return $this->sendError('Request not found.');
-        }
-
-        // Authorization check
-        if (!$this->canAccessRequest($user, $request)) {
-            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to view comments for this request'], 403);
-        }
-
-        $query->where('request_id', $httpRequest->request_id);
-
-        // Filter by user_id
-        if ($httpRequest->has('user_id')) {
-            $query->where('user_id', $httpRequest->user_id);
-        }
-
-        // Filter by content (partial match)
-        if ($httpRequest->has('content')) {
-            $query->where('content', 'like', '%' . $httpRequest->content . '%');
-        }
-
-        // Filter by date ranges
-        if ($httpRequest->has('created_from')) {
-            $query->where('created_at', '>=', $httpRequest->created_from);
-        }
-
-        if ($httpRequest->has('created_to')) {
-            $query->where('created_at', '<=', $httpRequest->created_to);
-        }
-
-        if ($httpRequest->has('updated_from')) {
-            $query->where('updated_at', '>=', $httpRequest->updated_from);
-        }
-
-        if ($httpRequest->has('updated_to')) {
-            $query->where('updated_at', '<=', $httpRequest->updated_to);
-        }
-
-        // Include relationships
-        $with = [];
-        if ($httpRequest->has('include')) {
-            $includes = explode(',', $httpRequest->include);
-            if (in_array('user', $includes)) $with[] = 'user';
-            if (in_array('request', $includes)) $with[] = 'request';
-        }
-
-        if (!empty($with)) {
-            $query->with($with);
-        }
-
-        // Sorting
-        $sortField = $httpRequest->get('sort_by', 'created_at');
-        $sortDirection = $httpRequest->get('sort_dir', 'desc');
-        $allowedSortFields = ['id', 'user_id', 'created_at', 'updated_at'];
-
-        if (in_array($sortField, $allowedSortFields)) {
-            $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
-        } else {
-            $query->orderBy('created_at', 'desc');
-        }
-
-        // Pagination
-        $perPage = $httpRequest->get('per_page', 15);
-        $comments = $query->paginate($perPage);
-
-        return $this->sendResponse(
-            RequestCommentResource::collection($comments)->response()->getData(true),
-            'Comments retrieved successfully.'
-        );
     }
 
     /**
@@ -103,34 +38,17 @@ class RequestCommentController extends BaseController
      */
     public function store(HttpRequest $httpRequest): JsonResponse
     {
-        $user = Auth::user();
-        $input = $httpRequest->all();
-
-        $validator = Validator::make($input, [
-            'request_id' => 'required|exists:requests,id',
-            'content' => 'required|string',
-        ]);
-
-        if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
+        try {
+            $comment = $this->requestCommentService->createComment($httpRequest);
+            return $this->sendResponse(
+                new RequestCommentResource($comment),
+                'Bình luận đã được tạo thành công.'
+            );
+        } catch (ValidationException $e) {
+            return $this->sendError('Lỗi dữ liệu.', $e->errors(), 422);
+        } catch (\Exception $e) {
+            return $this->sendError($e->getMessage());
         }
-
-        $request = Request::with('room.house')->find($input['request_id']);
-
-        // Authorization check
-        if (!$this->canAccessRequest($user, $request)) {
-            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to comment on this request'], 403);
-        }
-
-        // Set the user_id to current user
-        $input['user_id'] = $user->id;
-
-        $comment = RequestComment::create($input);
-
-        return $this->sendResponse(
-            new RequestCommentResource($comment->load('user')),
-            'Comment created successfully.'
-        );
     }
 
     /**
@@ -138,22 +56,15 @@ class RequestCommentController extends BaseController
      */
     public function show(string $id): JsonResponse
     {
-        $user = Auth::user();
-        $comment = RequestComment::with('user', 'request.room.house')->find($id);
-
-        if (is_null($comment)) {
-            return $this->sendError('Comment not found.');
+        try {
+            $comment = $this->requestCommentService->getCommentById($id);
+            return $this->sendResponse(
+                new RequestCommentResource($comment),
+                'Bình luận đã được lấy thành công.'
+            );
+        } catch (\Exception $e) {
+            return $this->sendError($e->getMessage());
         }
-
-        // Authorization check
-        if (!$this->canAccessRequest($user, $comment->request)) {
-            return $this->sendError('Unauthorized', ['error' => 'You do not have permission to view this comment'], 403);
-        }
-
-        return $this->sendResponse(
-            new RequestCommentResource($comment),
-            'Comment retrieved successfully.'
-        );
     }
 
     /**
@@ -161,35 +72,17 @@ class RequestCommentController extends BaseController
      */
     public function update(HttpRequest $httpRequest, string $id): JsonResponse
     {
-        $user = Auth::user();
-        $input = $httpRequest->all();
-        $comment = RequestComment::with('request.room.house')->find($id);
-
-        if (is_null($comment)) {
-            return $this->sendError('Comment not found.');
+        try {
+            $comment = $this->requestCommentService->updateComment($httpRequest, $id);
+            return $this->sendResponse(
+                new RequestCommentResource($comment),
+                'Bình luận đã được cập nhật thành công.'
+            );
+        } catch (ValidationException $e) {
+            return $this->sendError('Lỗi dữ liệu.', $e->errors(), 422);
+        } catch (\Exception $e) {
+            return $this->sendError($e->getMessage());
         }
-
-        // Authorization check - users can only edit their own comments
-        if ($comment->user_id !== $user->id && $user->role->code !== 'admin') {
-            return $this->sendError('Unauthorized', ['error' => 'You can only edit your own comments'], 403);
-        }
-
-        $validator = Validator::make($input, [
-            'content' => 'required|string',
-        ]);
-
-        if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
-        }
-
-        $comment->update([
-            'content' => $input['content']
-        ]);
-
-        return $this->sendResponse(
-            new RequestCommentResource($comment->load('user')),
-            'Comment updated successfully.'
-        );
     }
 
     /**
@@ -197,60 +90,11 @@ class RequestCommentController extends BaseController
      */
     public function destroy(string $id): JsonResponse
     {
-        $user = Auth::user();
-        $comment = RequestComment::with('request.room.house')->find($id);
-
-        if (is_null($comment)) {
-            return $this->sendError('Comment not found.');
+        try {
+            $this->requestCommentService->deleteComment($id);
+            return $this->sendResponse([], 'Bình luận đã được xóa thành công.');
+        } catch (\Exception $e) {
+            return $this->sendError($e->getMessage());
         }
-
-        // Users can delete their own comments
-        if ($comment->user_id === $user->id) {
-            $comment->delete();
-            return $this->sendResponse([], 'Comment deleted successfully.');
-        }
-
-        // Admins can delete any comment
-        if ($user->role->code === 'admin') {
-            $comment->delete();
-            return $this->sendResponse([], 'Comment deleted successfully.');
-        }
-
-        // Managers can delete comments on requests from their houses
-        if ($user->role->code === 'manager') {
-            if ($user->id === $comment->request->room->house->manager_id) {
-                $comment->delete();
-                return $this->sendResponse([], 'Comment deleted successfully.');
-            }
-        }
-
-        return $this->sendError('Unauthorized', ['error' => 'You do not have permission to delete this comment'], 403);
-    }
-
-    /**
-     * Check if user can access a request
-     */
-    private function canAccessRequest($user, $request): bool
-    {
-        // Admins can access all requests
-        if ($user->role->code === 'admin') {
-            return true;
-        }
-
-        // Tenants can only access requests they sent or received
-        if ($user->role->code === 'tenant') {
-            return $user->id === $request->sender_id || $user->id === $request->recipient_id;
-        }
-
-        // Managers can access requests they sent/received or from their houses
-        if ($user->role->code === 'manager') {
-            if ($user->id === $request->sender_id || $user->id === $request->recipient_id) {
-                return true;
-            }
-
-            return $user->id === $request->room->house->manager_id;
-        }
-
-        return false;
     }
 }
