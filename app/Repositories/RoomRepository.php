@@ -118,7 +118,7 @@ class RoomRepository implements RoomRepositoryInterface
      */
     public function getById(int $id)
     {
-        return $this->model->find($id);
+        return $this->model->with('currentContract.users')->find($id);
     }
 
     /**
