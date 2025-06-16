@@ -6,7 +6,6 @@ use App\Models\Room;
 use App\Models\User;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
-use App\Models\PaymentMethod;
 use App\Models\Notification;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;

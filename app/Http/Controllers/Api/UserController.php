@@ -135,7 +135,7 @@ class UserController extends BaseController
                 $message = preg_replace('/:(\d+)$/', '', $message);
             }
             
-            return $this->sendError('Lỗi khi xóa người dùng', [$message], $code);
+            return $this->sendError($message, [$message], $code);
         }
     }
     

@@ -250,6 +250,12 @@ class UserService
             throw new \Exception('Bạn không có quyền xóa người dùng này.');
         }
 
+        $contracts = $user->contracts;
+
+        if ($contracts->where('status', 'active')->count() > 0) {
+            throw new \Exception('Không thể xóa người dùng này vì họ đang có hợp đồng hoạt động.');
+        }
+
         return $this->userRepository->delete($id);
     }
 

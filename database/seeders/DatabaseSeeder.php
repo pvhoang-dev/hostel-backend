@@ -15,6 +15,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             RoleSeeder::class,
+            PaymentMethodSeeder::class,
             UserSeeder::class,
             HouseSeeder::class,
             RoomSeeder::class,
@@ -26,7 +27,6 @@ class DatabaseSeeder extends Seeder
             HouseSettingSeeder::class, 
             StorageSeeder::class,
             ContractSeeder::class,
-            PaymentMethodSeeder::class,
             ServiceUsageSeeder::class,
             InvoiceSeeder::class,
             RequestSeeder::class,

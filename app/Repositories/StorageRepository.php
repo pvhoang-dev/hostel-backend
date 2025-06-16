@@ -120,7 +120,7 @@ class StorageRepository implements StorageRepositoryInterface
      */
     public function create(array $data): EquipmentStorage
     {
-        return $this->model->create($data);
+        return $this->model->with('house','equipment')->create($data);
     }
 
     /**

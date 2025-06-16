@@ -7,7 +7,6 @@ use App\Models\Room;
 use App\Models\User;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
-use App\Models\PaymentMethod;
 use App\Models\Notification;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
@@ -23,10 +22,6 @@ class ContractSeeder extends Seeder
         })->get();
 
         $availableRooms = Room::where('status', 'available')->get();
-
-        // Lấy các phương thức thanh toán
-        $paymentMethods = PaymentMethod::all();
-        $paymentMethodIds = $paymentMethods->pluck('id')->toArray();
 
         // Quản lý danh sách tenant đã được chỉ định phòng
         $assignedTenants = [];
@@ -129,13 +124,8 @@ class ContractSeeder extends Seeder
                     $invoice->updated_by = $manager->id;
                     $invoice->payment_status = 'completed';
                     $invoice->payment_date = $startDate; // Thanh toán vào ngày ký hợp đồng
-
-                    // Gán phương thức thanh toán và mã giao dịch
-                    if (count($paymentMethodIds) > 0) {
-                        $invoice->payment_method_id = rand(1, 2);
-                        $invoice->transaction_code = 'CONTRACT-' . $contract->id . '-' . uniqid();
-                    }
-
+                    $invoice->payment_method_id = 1;
+                    $invoice->transaction_code = 'CONTRACT-' . $contract->id . '-' . uniqid();
                     $invoice->total_amount = 0; // Sẽ cập nhật sau
                     $invoice->save();
 

@@ -11,7 +11,7 @@ return new class extends Migration {
         // Thêm các trường từ bảng transactions vào bảng invoices
         Schema::table('invoices', function (Blueprint $table) {
             $table->unsignedBigInteger('payment_method_id')->nullable()->after('updated_by');
-            $table->string('transaction_code', 255)->nullable()->unique()->after('payment_method_id');
+            $table->string('transaction_code', 255)->nullable()->after('payment_method_id');
             $table->string('payment_status', 20)->default('pending')->after('transaction_code');
             $table->dateTime('payment_date')->nullable()->after('payment_status');
             

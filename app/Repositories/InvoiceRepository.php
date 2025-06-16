@@ -43,6 +43,12 @@ class InvoiceRepository implements InvoiceRepositoryInterface
             $query->where('id', $request->id);
         }
 
+        if ($request->has('house_id')) {
+            $query->whereHas('room', function ($q) use ($request) {
+                $q->where('house_id', $request->house_id);
+            });
+        }
+
         if ($request->has('room_id')) {
             $query->where('room_id', $request->room_id);
         }
